@@ -1,5 +1,18 @@
+""" 
+
+This script converts FGE data provided in the LFCA ASCII format to a
+NetCDF format that mimics the production format. It doesn’t have
+everything in the production format, but has everything from the ASCII files
+that overlaps the production format, and uses the same variable names. 
+
+Author: Eric Bruning, 20 April 2017
+License: BSD
+
+"""
+
 import pandas as pd
 import xarray as xr
+
 
 """
 Example of data format:
