@@ -20,7 +20,13 @@ class GLMDataset(object):
         self.split_groups = self.dataset.groupby('group_parent_flash_id')
         self.split_events = self.dataset.groupby('event_parent_group_id')
         
-        self.energy_min, self.energy_max = 0, self.dataset.flash_energy.max()
+        if len(getattr(self.dataset, self.fl_dim)) > 0:
+            self.energy_min, self.energy_max = 0, self.dataset.flash_energy.max()
+        else:
+            # there are no flashes
+            pass
+            
+
 
 
         # for k, v in self.split_groups.groups.items():
