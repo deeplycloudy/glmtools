@@ -3,6 +3,47 @@ import itertools
 import numpy as np
 import xarray as xr
 
+def fix_event_locations(event_lats, event_lons, is_xarray=False):
+    """ event_lats and event_lons are netCDF4 Variables, or
+        if is_xarray=True, xarray Variables.
+    
+        returns fixed (event_lats, event_lons)
+    
+        This function is used to correct for the NetCDF-Java convention of writing 
+        signed int16 and tagging it with an _Unsigned attribute. Per 
+        http://www.unidata.ucar.edu/software/thredds/current/netcdf-java/CDM/Netcdf4.html
+        NetCDF Java cannot write a proper unsigned integer.
+    """
+    
+    # From PUG spec, and matches values in file.
+    lon_fov = (-156.06, -22.94)
+    dlon_fov = lon_fov[1]-lon_fov[0]
+    lat_fov = (-66.56, 66.56)
+    scale_factor = 0.00203128
+
+    
+    if is_xarray==True:
+        # unscale the data 
+        unscale_lat = ((event_lats - lat_fov[0])/scale_factor).data.astype('int32')
+        unscale_lon = ((event_lons - lon_fov[0])/scale_factor).data.astype('int32')
+        event_lats = unscale_lat
+        event_lons = unscale_lon
+    else: # is NetCDF Variable
+        event_lons.set_auto_scale(False)
+        event_lats.set_auto_scale(False)
+        event_lons = event_lons[:].astype('int32')
+        event_lats = event_lats[:].astype('int32')
+
+    unsigned = 2**16
+    event_lons[event_lons < 0] += unsigned
+    event_lats[event_lats < 0] += unsigned
+    
+    event_lons_fixed = (event_lons)*scale_factor+lon_fov[0]
+    event_lats_fixed = (event_lats)*scale_factor+lat_fov[0]
+    
+    return event_lats_fixed, event_lons_fixed
+
+
 
 class GLMDataset(object):
     def __init__(self, filename):
