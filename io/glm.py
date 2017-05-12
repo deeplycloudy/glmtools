@@ -13,6 +13,18 @@ def fix_event_locations(event_lats, event_lons, is_xarray=False):
         signed int16 and tagging it with an _Unsigned attribute. Per 
         http://www.unidata.ucar.edu/software/thredds/current/netcdf-java/CDM/Netcdf4.html
         NetCDF Java cannot write a proper unsigned integer.
+    
+        If the version of netcdf4-python used to read the data is >=1.2.8, then 
+        this function is not needed. The issue corrected by this function was 
+        built into netcdf4-python in PR #658 developed in response to issue #656. 
+    
+        xarray turns off auto-scaling, which also turns off the unsigned int
+        correction in netCDF4-python. xarray then applies the scale/offset itself.
+        Therefore, this function is still needed to undo xarray's scale/offset, 
+        followed by unsigned int conversion and reapplication of the scale/offset.
+        
+        and so the scaling must be worked around 
+
     """
     
     # From PUG spec, and matches values in file.
