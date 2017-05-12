@@ -7,6 +7,10 @@ The second, full-auto method should work if the version (>=1.2.8) of netcdf4-pyt
 
 These tests were developed with GLM data dating after 24 April 2017, but may not work with
 later production upgrades if the unsigned int encoding method used in the production system changes.
+
+The correct answers are:
+-139.505
+-43.7424
 """
 
 
