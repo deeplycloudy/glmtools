@@ -88,7 +88,7 @@ glm_unsigned_float_vars = (
 'flash_quality_flag',
 'yaw_flip_flag',
 )
-glm_unsigned_vars = glm_unsigned_vars + (
+glm_unsigned_vars = glm_unsigned_float_vars + (
 'event_id',
 'group_id',
 'flash_id',
