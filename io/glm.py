@@ -53,7 +53,7 @@ def fix_event_locations(event_lats, event_lons, is_xarray=False):
     lat_fov = (-66.56, 66.56)
     scale_factor = 0.00203128
 
-    
+
     if is_xarray==True:
         # unscale the data 
         unscale_lat = ((event_lats - lat_fov[0])/scale_factor).data.astype('int32')
@@ -99,7 +99,7 @@ glm_unsigned_vars = glm_unsigned_float_vars + (
 class GLMDataset(object):
     def __init__(self, filename):
         """ filename is any data source which works with xarray.open_dataset """
-        self.dataset = xr.open_dataset(filename)
+        dataset = xr.open_dataset(filename)
 
         self.fov_dim = 'number_of_field_of_view_bounds'
         self.wave_dim = 'number_of_wavelength_bounds'
@@ -108,20 +108,23 @@ class GLMDataset(object):
         self.ev_dim = 'number_of_events'
         self.fl_dim = 'number_of_flashes'
 
+        idx = {self.gr_dim: ['group_parent_flash_id', 'group_id',
+                             'group_time_offset',
+                             'group_lat', 'group_lon'],
+               self.ev_dim: ['event_parent_group_id', 'event_id',
+                             'event_time_offset',
+                             'event_lat', 'event_lon'],
+               self.fl_dim: ['flash_id',
+                             'flash_time_offset_of_first_event',
+                             'flash_time_offset_of_last_event',
+                             'flash_lat', 'flash_lon']}
+        self.dataset = dataset.set_index(**idx)
+
         self.split_flashes = self.dataset.groupby('flash_id')
         self.split_groups = self.dataset.groupby('group_id')
         self.split_events = self.dataset.groupby('event_id')
         self.split_groups_parent = self.dataset.groupby('group_parent_flash_id')
         self.split_events_parent = self.dataset.groupby('event_parent_group_id')
-        
-        if len(getattr(self.dataset, self.fl_dim)) > 0:
-            self.energy_min, self.energy_max = 0, self.dataset.flash_energy.max()
-        else:
-            # there are no flashes
-            pass
-
-        # for k, v in self.split_groups_parent.groups.items():
-        #     print k,v
 
     @property
     def fov_bounds(self):
@@ -169,19 +172,15 @@ class GLMDataset(object):
             to add event_parent_flash_id to the original flash_data:
             flash_data['event_parent_flash_id']=xarray.DataArray(flash_ids_per_event, dims=[self.ev_dim])
         """
-        gr_idx = [self.split_groups.groups[gid] for gid in flash_data.event_parent_group_id.data]
-        
-        # indexing directly with gr_idx doesn't work ... gives an error on a conflicting number of dimensions
-        # This might/will likely return nonsense if the group index is not identical 
-        # to 0 ... N-1 for the number of elements in group_parent_flash_id, i.e., the index
-        # is automatically generated as an arange.    
-        flash_ids_per_event = self.dataset.group_parent_flash_id[:].data[gr_idx].squeeze()
-        
-        # Should be equiavlent to this oneliner, i.e., 
-        # (flash_ids_per_event == flash_ids_per_event_careful).all() is true
-        # flash_ids_per_event_careful= np.asarray([glm.dataset.group_parent_flash_id[glm.split_groups.groups[gid]]['group_parent_flash_id'].data[0] for gid in  glm.dataset.event_parent_group_id.data])
-        # Which extracts data from this version which returns a series of one-group datasets
-        # [glm.dataset.group_parent_flash_id[glm.split_groups.groups[gid]] for gid in  glm.dataset.event_parent_group_id.data]
+
+        gr_idx = [self.split_groups.groups[gid] for gid
+                  in flash_data.event_parent_group_id.data]
+        gr_idx_flat = np.asarray(gr_idx).flatten()
+
+        # Need to index the whole dataset because the group_by indexes
+        # the whole dataset
+        replicated_groups = self.dataset.group_id[gr_idx_flat]
+        flash_ids_per_event = replicated_groups.group_parent_flash_id.data
 
         return flash_ids_per_event
 
@@ -210,6 +209,8 @@ class GLMDataset(object):
         ev_idx = list(itertools.chain.from_iterable(ev_iter))
 
         # get just the events that correspond to this flash
+        # the event dim has not yet been reduced, so we can index along that
+        # dimension with the dataset-wide groupby.
         these_flashes = grp_sub[{self.ev_dim:ev_idx}]
         return these_flashes
         
