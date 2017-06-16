@@ -2,7 +2,9 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-from glmtools.io.glm import fix_unsigned
+# from glmtools.io.glm import fix_unsigned
+def fix_unsigned(arg):
+    return arg
 
 # from lmatools.io.LMA_h5_file import LMAh5Collection
 

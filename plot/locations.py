@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 
-def plot_flash(glm, some_flash):
-    flash_data = glm.get_flashes([some_flash])
+def plot_flash(glm, flash_id):
+    flash_data = glm.get_flashes([flash_id])
 
     ev_parent = flash_data.event_parent_group_id  
     gr_parent = flash_data.group_parent_flash_id
