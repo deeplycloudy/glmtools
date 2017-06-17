@@ -42,6 +42,9 @@ parser.add_argument('--width', metavar='distance in km',
 parser.add_argument('--height', metavar='distance in km', 
                     dest='height', action='store', default=400.0,
                     help='total height of the grid')
+parser.add_argument('--lma', dest='is_lma', 
+                    action='store_true', default='store_false',
+                    help='grid LMA h5 files instead of GLM data')
 # parser.add_argument('-v', dest='verbose', action='store_true',
                     # help='verbose mode')
 # parser.add_argument('--speed', dest='speed', action='store',
@@ -85,12 +88,20 @@ dx, dy, x_bnd, y_bnd = dlonlat_at_grid_center(ctr_lat, ctr_lon,
                             x_bnd = x_bnd_km, y_bnd = y_bnd_km )
 print(x_bnd, y_bnd)
 
-grid_GLM_flashes(glm_filenames, start_time, end_time, proj_name='latlong',
+
+if args.is_lma == True:
+    gridder = grid_h5flashfiles
+    output_filename_prefix='LMA'
+else:
+    gridder = grid_GLM_flashes
+    output_filename_prefix='GLM'
+    
+gridder(glm_filenames, start_time, end_time, proj_name='latlong',
         base_date = date, do_3d=False,
         dx=dx, dy=dy, frame_interval=frame_interval,
         #dz=dz, z_bnd=z_bnd_km,
         x_bnd=x_bnd, y_bnd=y_bnd, 
         ctr_lat=ctr_lat, ctr_lon=ctr_lon, outpath = outpath,
         output_writer = write_cf_netcdf_latlon,
-        output_filename_prefix='GLM', spatial_scale_factor=1.0
+        output_filename_prefix=output_filename_prefix, spatial_scale_factor=1.0
         )

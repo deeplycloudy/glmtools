@@ -57,7 +57,10 @@ def _fake_lma_from_glm(flash_data, basedate):
     # for each event get the group id
     # for each group id get the flash id
 
-    
+    if flash_np.shape[0] == 0:
+        # no data, nothing to do
+        return event_np, flash_np
+        
     event_np['flash_id'] = flash_data.event_parent_flash_id.data
     # Doesn't work for more than one flash in the data table.
     # event_np['flash_id'] = flash_data.event_parent_flash_id.data
