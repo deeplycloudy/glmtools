@@ -10,11 +10,14 @@ def read_flashes(glm, target, base_date=None, min_points=10, lon_range=None, lat
     """ This routine is the data pipeline source, responsible for pushing out 
         events and flashes. Using a different flash data source format is a matter of
         replacing this routine to read in the necessary event and flash data."""
-    
-    events, flashes = mimic_lma_dataset(glm, base_date, lon_range=lon_range, lat_range=lat_range)
-    if events.shape[0] >= min_points:
-        target.send((events, flashes))
-        del events, flashes
+    try:
+        events, flashes = mimic_lma_dataset(glm, base_date, lon_range=lon_range, lat_range=lat_range)
+        if events.shape[0] >= min_points:
+            target.send((events, flashes))
+            del events, flashes
+    except KeyError as ke:
+        err_txt = 'Skipping {0}\n    ... assuming a flash, group, or event with id {1} does not exist'
+        print(err_txt.format(glm.dataset.dataset_name, ke))
 
     
 class GLMGridder(FlashGridder):
