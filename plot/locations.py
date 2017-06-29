@@ -22,7 +22,7 @@ def plot_flash(glm, flash_id):
     fl_lon = flash_data.flash_lon.data
     fl_rad = flash_data.flash_energy.data
     fl_time = (flash_data.flash_time_offset_of_first_event.data[0], 
-               flash_data.flash_time_offset_of_first_event.data[0])
+               flash_data.flash_time_offset_of_last_event.data[0])
 
     fig = plt.figure()
     ax_ev = fig.add_subplot(111)
@@ -40,3 +40,10 @@ def plot_flash(glm, flash_id):
     ax_ev.get_yaxis().get_major_formatter().set_useOffset(False)
 
     return fig
+
+
+if __name__ == '__main__':
+    from glmtools.plot.locations import plot_flash    
+    from glmtools.io.glm import GLMDataset
+    glm = GLMDataset('/data/LCFA-production/OR_GLM-L2-LCFA_G16_s20171161230400_e20171161231000_c20171161231027.nc')
+    plot_flash(glm, 6666)
