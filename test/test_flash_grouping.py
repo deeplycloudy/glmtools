@@ -1,11 +1,27 @@
+import os
 import numpy as np
 from glmtools.io.glm import GLMDataset
 
 from numpy.testing import assert_equal
 
+def get_sample_data_path():
+    import glmtools.test
+    data_path = os.path.abspath(glmtools.test.__path__[0])
+    data_folder = 'data' #inside data_path
+    path = os.path.join(data_path, data_folder)
+    return path
+
+def get_sample_data_list():
+    path = get_sample_data_path()
+    filenames  = glob.glob(os.path.join(path, '*.nc'))
+    return filenames
+    
 def get_test_dataset():
-    filename ='/data/LCFA-production/OR_GLM-L2-LCFA_G16_s20171161230400_e20171161231000_c20171161231027.nc'
-    flash_ids=np.array([6359, 6472, 6666])
+    # filename ='/data/LCFA-production/OR_GLM-L2-LCFA_G16_s20171161230400_e20171161231000_c20171161231027.nc'
+    # flash_ids=np.array([6359, 6472, 6666])
+    path = get_sample_data_path()
+    filename = os.path.join(path, 'FGE_split_merge_GLM.nc')
+    flash_ids = [1, 2, 3, 4, 5, 6, 7, 8, 9]
     flash_ids.sort()
     glm = GLMDataset(filename)
     return glm, flash_ids
