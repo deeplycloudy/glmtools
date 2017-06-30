@@ -202,33 +202,41 @@ class OneToManyTraversal(object):
                     e_idx = slice(0, 0)
                 # Interesting: what if we have a multidimensional 
                 # hierarchical cluster id? Can't index by dims[0] alone.
-                indexer[dataset[e_var].dims[0]]=e_idx
-                
-        # Don't stop pruning until the bottom is reached
+                indexer[dataset[e_var].dims[0]] = e_idx
+        # Reset pruning now that the bottom has been reached
         prune = False
+            
+        # if prune first at the bottom of the hierarchy, the prune block
+        # above doesn't run, so we need to use the indexer that was created.
+        if len(indexer.keys()) > 0:
+            dataset = dataset[indexer]
         
-        # # Now we ascend through the dataset in order to prune out parents
-        # # above the level of entity_id_var who do not contain at least one
-        # # child at the level of entity_id_var
-        # for e_var, p_var in self._ascend():
-        #     if e_var == entity_id_var:
-        #         # start pruning once we reach the level of entity_id_var
-        #         # but don't do anything until we ascend to the next level.
-        #         prune = True
-        #         last_entity_ids = dataset[e_var].data
-        #
-        #     if (prune == True) & (p_var is not None):
-        #         if len(entity_ids) == 0:
-        #             # xarray doesn't accept an empty array as a valid index
-        #             e_idx = slice(0, 0)
-        #         else:
-        #             e_iter = (self.parent_groups[p_var].groups[eid]
-        #                       for eid in last_entity_ids)
-        #             e_idx = list(itertools.chain.from_iterable(e_iter))
-        #         indexer[dataset[e_var].dims[0]]=e_idx
-        #         dataset = dataset[indexer]
-        #         last_entity_ids = dataset[e_var].data
-        #
+        # Now we ascend through the dataset in order to prune out parents
+        # above the level of entity_id_var who do not contain at least one
+        # child at the level of entity_id_var
+        for e_var, p_var in self._ascend():
+            if (prune == True):
+                e_group = self.entity_groups[e_var].groups
+                e_iter = (e_group[eid] for eid in last_entity_ids
+                          if eid in e_group)
+                e_idx = list(itertools.chain.from_iterable(e_iter))
+                if len(e_idx) == 0:
+                    # xarray doesn't accept an empty array as a valid index
+                    e_idx = slice(0, 0)
+                indexer[dataset[e_var].dims[0]]=e_idx
+                dataset = dataset[indexer]
+            if (p_var is not None):
+                last_entity_ids = np.unique(dataset[p_var].data)
+            else:
+                # we've reached the top
+                prune = False
+
+            indexer = {}
+            if (e_var == entity_id_var) & (p_var is not None):
+                # start pruning once we reach the level of entity_id_var
+                # but don't do anything until we ascend to the next level.
+                prune = True
+                last_entity_ids = np.unique(dataset[p_var].data)
 
         return dataset
         

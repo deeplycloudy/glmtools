@@ -29,17 +29,33 @@ def test_replicate_parent_ids():
     assert_equal(d['trig_parent_stroke_id'].data, trig_parent_stroke_ids)
     
     
-# def test_prune_from_middle():
-#     d, traversal = get_four_level_data_traversal()
-#     reduced_stroke_id = [13,15,23]
-#     d = traversal.reduce_to_entities('stroke_id', reduced_stroke_id)
-#     reduced_storm_id = [2,]
-#     reduced_flash_id = [4,8]
-#     reduced_trig_id = [18,19,23,31]
-#     # assert_equal(d['storm_id'], reduced_storm_id)
-#     # assert_equal(d['flash_id'], reduced_flash_id)
-#     # assert_equal(d['stroke_id'], reduced_stroke_id)
-#     assert_equal(d['trig_id'], reduced_trig_id)
+def test_prune_from_middle():
+    d, traversal = get_four_level_data_traversal()
+
+    reduced_stroke_id = [13,15,23]
+    d = traversal.reduce_to_entities('stroke_id', reduced_stroke_id)
+    reduced_storm_id = [2,]
+    reduced_flash_id = [4,8]
+    reduced_trig_id = [18,19,23,31]
+    assert_equal(d['storm_id'].data, reduced_storm_id)
+    assert_equal(d['flash_id'].data, reduced_flash_id)
+    assert_equal(d['stroke_id'].data, reduced_stroke_id)
+    assert_equal(d['trig_id'].data, reduced_trig_id)
+
+def test_prune_from_bottom():
+    d, traversal = get_four_level_data_traversal()
+    
+    trig_idx = slice(7,10)
+    reduced_storm_id = np.unique(d['trig_parent_storm_id'][trig_idx].data)
+    reduced_flash_id = np.unique(d['trig_parent_flash_id'][trig_idx].data)
+    reduced_stroke_id = np.unique(d['trig_parent_stroke_id'][trig_idx].data)
+    reduced_trig_id = d['trig_id'][trig_idx].data
+    d = traversal.reduce_to_entities('trig_id', reduced_trig_id)
+    print(d)
+    assert_equal(d['trig_id'].data, reduced_trig_id)
+    assert_equal(d['stroke_id'].data, reduced_stroke_id)
+    assert_equal(d['flash_id'].data, reduced_flash_id)
+    assert_equal(d['storm_id'].data, reduced_storm_id)
 
 def test_prune_from_top():
     d, traversal = get_four_level_data_traversal()
