@@ -5,7 +5,7 @@ from .common import get_four_level_data
 
 from glmtools.io.traversal import OneToManyTraversal
 
-def test_replicate_parent_ids():
+def get_four_level_data_traversal():
     d = get_four_level_data()
     
     entity_vars = ('storm_id', 'flash_id', 'stroke_id', 'trig_id')
@@ -13,7 +13,10 @@ def test_replicate_parent_ids():
                    'stroke_parent_flash_id', 
                    'trig_parent_stroke_id')
     traversal = OneToManyTraversal(d, entity_vars, parent_vars)
-    
+    return d, traversal
+
+def test_replicate_parent_ids():
+    d, traversal = get_four_level_data_traversal()
     trig_parent_storm_ids = traversal.replicate_parent_ids('storm_id', 
                                                     'trig_parent_stroke_id')
     trig_parent_flash_ids = traversal.replicate_parent_ids('flash_id', 
@@ -21,7 +24,41 @@ def test_replicate_parent_ids():
     trig_parent_stroke_ids = traversal.replicate_parent_ids('stroke_id', 
                                                     'trig_parent_stroke_id')
 
-    print(d)
     assert_equal(d['trig_parent_storm_id'].data, trig_parent_storm_ids)
     assert_equal(d['trig_parent_flash_id'].data, trig_parent_flash_ids)
     assert_equal(d['trig_parent_stroke_id'].data, trig_parent_stroke_ids)
+    
+    
+# def test_prune_from_middle():
+#     d, traversal = get_four_level_data_traversal()
+#     reduced_stroke_id = [13,15,23]
+#     d = traversal.reduce_to_entities('stroke_id', reduced_stroke_id)
+#     reduced_storm_id = [2,]
+#     reduced_flash_id = [4,8]
+#     reduced_trig_id = [18,19,23,31]
+#     # assert_equal(d['storm_id'], reduced_storm_id)
+#     # assert_equal(d['flash_id'], reduced_flash_id)
+#     # assert_equal(d['stroke_id'], reduced_stroke_id)
+#     assert_equal(d['trig_id'], reduced_trig_id)
+
+def test_prune_from_top():
+    d, traversal = get_four_level_data_traversal()
+    reduced_storm_id = [1,]
+    d = traversal.reduce_to_entities('storm_id', reduced_storm_id)
+    reduced_stroke_id = np.asarray([])
+    reduced_flash_id = np.asarray([])
+    reduced_trig_id = np.asarray([])
+    assert_equal(d['storm_id'], reduced_storm_id)
+    assert_equal(d['flash_id'], reduced_flash_id)
+    assert_equal(d['stroke_id'], reduced_stroke_id)
+    assert_equal(d['trig_id'], reduced_trig_id)
+
+    reduced_storm_id = [2,]
+    d = traversal.reduce_to_entities('storm_id', reduced_storm_id)
+    reduced_flash_id = [4,5,6,7,8]
+    reduced_stroke_id = [13,14,15,19,20,23,46]
+    reduced_trig_id = [18,19,20,22,23,25,26,30,31,32]    
+    assert_equal(d['storm_id'].data, reduced_storm_id)
+    assert_equal(d['flash_id'].data, reduced_flash_id)
+    assert_equal(d['stroke_id'].data, reduced_stroke_id)
+    assert_equal(d['trig_id'].data, reduced_trig_id)
