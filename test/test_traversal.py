@@ -17,18 +17,31 @@ def get_four_level_data_traversal():
     
 def test_count_children():
     d, traversal = get_four_level_data_traversal()
-    storm_child_count = d['storm_child_count'].data
-    flash_child_count = d['flash_child_count'].data
-    stroke_child_count = d['stroke_child_count'].data
-
-    n_storms = traversal.count_children('storm_id')
+    
+    # validation data
+    storm_child_count = d['storm_child_flash_count'].data
+    flash_child_count = d['flash_child_stroke_count'].data
+    stroke_child_count = d['stroke_child_trig_count'].data
+    storm_child_stroke_count = d['storm_child_stroke_count'].data
+    storm_child_trig_count = d['storm_child_trig_count'].data
+    
+    n_storms = traversal.count_children('storm_id')[0]
     assert_equal(storm_child_count, n_storms)
-    n_flashes = traversal.count_children('flash_id')
+    n_flashes = traversal.count_children('flash_id')[0]
     assert_equal(flash_child_count, n_flashes)
-    n_strokes = traversal.count_children('stroke_id')
+    n_strokes = traversal.count_children('stroke_id')[0]
     assert_equal(stroke_child_count, n_strokes)
 
-
+    all_counts = traversal.count_children('storm_id', 'trig_id')
+    assert_equal(storm_child_count, all_counts[0])
+    assert_equal(flash_child_count, all_counts[1])
+    assert_equal(stroke_child_count, all_counts[2])
+    
+    grouper = d.groupby('trig_parent_storm_id').groups
+    count = [len(grouper[eid]) if (eid in grouper) else 0
+             for eid in d['storm_id'].data]
+    assert_equal(storm_child_trig_count, count)
+    
 def test_replicate_parent_ids():
     d, traversal = get_four_level_data_traversal()
     trig_parent_storm_ids = traversal.replicate_parent_ids('storm_id', 
@@ -65,7 +78,6 @@ def test_prune_from_bottom():
     reduced_stroke_id = np.unique(d['trig_parent_stroke_id'][trig_idx].data)
     reduced_trig_id = d['trig_id'][trig_idx].data
     d = traversal.reduce_to_entities('trig_id', reduced_trig_id)
-    print(d)
     assert_equal(d['trig_id'].data, reduced_trig_id)
     assert_equal(d['stroke_id'].data, reduced_stroke_id)
     assert_equal(d['flash_id'].data, reduced_flash_id)

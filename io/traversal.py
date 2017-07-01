@@ -93,27 +93,40 @@ class OneToManyTraversal(object):
         """ Iterate from children to parents"""
         yield from zip(self.entity_id_vars[::-1], self.parent_id_vars[::-1])
 
-    def count_children(self, entity_id_var):
-        """ Count the children of entity_id_var
+    def count_children(self, entity_id_var, child_entity_id_var=None):
+        """ Count the children of entity_id_var.
         
-        e.g., for every flash id, we want a column of how many 
-        children (strokes) it has. 
-        stroke_parent_flash_id will have replicated flash_ids, and so 
-        if we use every flash_id to 
+        Optionally, accumulate counts of children down to and including 
+        the level of child_entity_id_var. These are the counts from parent
+        to immediate child.
         
-        this is the inverse problem of 
+        If replicate_parent_ids has been used to create 'bottom_parent_top_id',
+        where the top and bottom are separated by a few levels, it is possible
+        to get an aggregate count (matching the top parent dimension) of the
+        children many generations below by doing:
+        > grouper = dataset.groupby('bottom_parent_top_id').groups
+        > count = [len(grouper[eid]) if (eid in grouper) else 0
+                   for eid in d['top_id'].data]
+        > assert_equal(storm_child_trig_count, count)
+        
+        Returns a list of counts of the children of entity_id_var and 
+        (optionally) its children.
         """
         count_next = False
+        all_counts = []
         for e_var, p_var in self._descend():
             if count_next == True:
                 grouper = self.parent_groups[p_var].groups
                 count = [len(grouper[eid]) if (eid in grouper) else 0
                          for eid in last_entity_ids]
+                last_entity_ids = self.dataset[e_var].data        
+                all_counts.append(np.asarray(count))
+            if (child_entity_id_var == None) | (e_var == child_entity_id_var):
                 count_next = False
             if e_var == entity_id_var:
                 count_next = True
                 last_entity_ids = self.dataset[e_var].data
-        return np.asarray(count)
+        return all_counts
     
     def replicate_parent_ids(self, entity_id_var, parent_id_var):
         """ Ascend from the level of parent_id_var to entity_id_var,

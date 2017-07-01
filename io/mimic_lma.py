@@ -108,7 +108,5 @@ def mimic_lma_dataset(glm, basedate, flash_ids=None, lon_range=None, lat_range=N
     else:
         flash_data = glm.dataset
             
-    event_parent_flash_id = glm.flash_id_for_events(flash_data)
-    flash_data['event_parent_flash_id']=xr.DataArray(event_parent_flash_id, dims=[glm.ev_dim])
     events, flashes = _fake_lma_from_glm(flash_data, basedate)
     return events, flashes

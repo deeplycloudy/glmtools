@@ -3,6 +3,8 @@ import itertools
 import numpy as np
 import xarray as xr
 
+from glmtools.io.traversal import OneToManyTraversal
+
 def fix_unsigned(data, is_xarray=True):
     """
     The function is used to fix data written as signed integer bytes
@@ -96,7 +98,7 @@ glm_unsigned_vars = glm_unsigned_float_vars + (
 'group_parent_flash_id',
 )
 
-class GLMDataset(object):
+class GLMDataset(OneToManyTraversal):
     def __init__(self, filename):
         """ filename is any data source which works with xarray.open_dataset """
         dataset = xr.open_dataset(filename)
@@ -118,14 +120,50 @@ class GLMDataset(object):
                              'flash_time_offset_of_first_event',
                              'flash_time_offset_of_last_event',
                              'flash_lat', 'flash_lon']}
-        self.dataset = dataset.set_index(**idx)
+                             
+        self.entity_ids = ['flash_id', 'group_id', 'event_id']
+        self.parent_ids = ['group_parent_flash_id', 'event_parent_group_id']
 
-        self.split_flashes = self.dataset.groupby('flash_id')
-        self.split_groups = self.dataset.groupby('group_id')
-        self.split_events = self.dataset.groupby('event_id')
-        self.split_groups_parent = self.dataset.groupby('group_parent_flash_id')
-        self.split_events_parent = self.dataset.groupby('event_parent_group_id')
+        # sets self.dataset
+        super().__init__(dataset.set_index(**idx), 
+                         self.entity_ids, self.parent_ids)
 
+        self.__init_parent_child_data()
+    
+    def __init_parent_child_data(self):
+        """ Calculate implied parameters that are useful for analyses
+            of GLM data.
+        """
+        flash_ids = self.replicate_parent_ids('flash_id', 
+                                              'event_parent_group_id'
+                                              )
+        event_parent_flash_id = xr.DataArray(flash_ids, dims=[self.ev_dim,])
+        self.dataset['event_parent_flash_id'] = event_parent_flash_id
+
+
+        all_counts = self.count_children('flash_id', 'event_id')
+        flash_child_count = all_counts[0]
+        flash_child_group_count = xr.DataArray(flash_child_count, 
+                                               dims=[self.fl_dim,])
+        self.dataset['flash_child_group_count'] = flash_child_group_count
+
+        group_child_count = all_counts[1]
+        group_child_event_count = xr.DataArray(group_child_count, 
+                                               dims=[self.gr_dim,])
+        self.dataset['group_child_event_count'] = group_child_event_count
+        
+        # we can use event_parent_flash_id to get the flash_child_event_count
+        # need a new groupby on event_parent_flash_id
+        # then count number of flash_ids that match in the groupby
+        # probably would be a good idea to add this to the 
+        grouper = self.dataset.groupby('event_parent_flash_id').groups
+        count = [len(grouper[eid]) if (eid in grouper) else 0
+                 for eid in self.dataset['flash_id'].data]
+        flash_child_event_count = xr.DataArray(count, 
+                                               dims=[self.fl_dim,])
+        self.dataset['flash_child_event_count'] = flash_child_event_count
+ 
+ 
     @property
     def fov_bounds(self):
 #         lat_bnd = self.dataset.lat_field_of_view_bounds.data
@@ -159,71 +197,12 @@ class GLMDataset(object):
         flash_ids = self.dataset.flash_id[good].data
         return self.get_flashes(flash_ids)
     
-    def flash_id_for_events(self, flash_data):
-        """ Retrieve an array of flash_ids for each event in flash_data 
-            by walking up the group to flash tree. The number of flash ids is
-            a equal to the total number of events in flash_data.
-        
-            flash_data is a (possible) subset of the whole glm.dataset which 
-            contains event, group, and flash data.
-        
-            returns event_parent_flash_id.
-        
-            to add event_parent_flash_id to the original flash_data:
-            flash_data['event_parent_flash_id']=xarray.DataArray(flash_ids_per_event, dims=[self.ev_dim])
-        """
-
-        gr_idx = [self.split_groups.groups[gid] for gid
-                  in flash_data.event_parent_group_id.data]
-        gr_idx_flat = np.asarray(gr_idx).flatten()
-
-        # Need to index the whole dataset because the group_by indexes
-        # the whole dataset
-        if len(gr_idx_flat) == 0:
-            # xarray doesn't accept an empty array as a valid index
-            gr_idx_flat = slice(0, 0)
-        replicated_groups = self.dataset.group_id[gr_idx_flat]
-        flash_ids_per_event = replicated_groups.group_parent_flash_id.data
-
-        return flash_ids_per_event
-
-    
     def get_flashes(self, flash_ids):
         """ Subset the dataset to a some flashes with ids given by a list of
             flash_ids. Can be used to retrieve a single flash by passing a
             single element list.
         """
-        
-        # The list of indices returned by the group dictionary correspond to the 
-        # indices automatically generated by xarray for each dimension, and
-        # don't correspond to the flash_id and group_id columns
-        if len(flash_ids) == 0:
-            # xarray doesn't accept an empty array as a valid index
-            fl_idx = slice(0, 0)
-            gr_idx = slice(0, 0)
-        else:
-            fl_iter = (self.split_flashes.groups[fid] for fid in flash_ids)
-            fl_idx = list(itertools.chain.from_iterable(fl_iter))
-            gr_iter = (self.split_groups_parent.groups[fid] for fid in flash_ids)
-            gr_idx = list(itertools.chain.from_iterable(gr_iter))
-        
-        #get just these flashes and their groups
-        grp_sub = self.dataset[{self.fl_dim:fl_idx,
-                                self.gr_dim:gr_idx
-                               }]
-
-        # get event ids for each group and chain them together into one list
-        if len(flash_ids) == 0:
-            # xarray doesn't accept an empty array as a valid index
-            ev_idx = slice(0, 0)
-        else:
-            ev_iter = (self.split_events_parent.groups[gid] for gid in grp_sub.group_id.data)
-            ev_idx = list(itertools.chain.from_iterable(ev_iter))
-
-        # get just the events that correspond to this flash
-        # the event dim has not yet been reduced, so we can index along that
-        # dimension with the dataset-wide groupby.
-        these_flashes = grp_sub[{self.ev_dim:ev_idx}]
+        these_flashes = self.reduce_to_entities('flash_id', flash_ids)
         return these_flashes
         
 

@@ -14,9 +14,12 @@ def get_four_level_data():
     trig_parent_storm_id =  [0,0,0,0,0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
     trig_parent_flash_id =  [1,1,1,1,1, 2, 2, 3, 4, 4, 4, 4, 4, 6, 8, 8, 8, 8]
 
-    storm_child_count = [3,0,5]
-    flash_child_count = [2,1,1,3,0,1,0,3]
-    stroke_child_count = [4,1,2,1,2,2,1,1,2,1,1]
+    storm_child_flash_count = [3,0,5]
+    flash_child_stroke_count = [2,1,1,3,0,1,0,3]
+    stroke_child_trig_count = [4,1,2,1,2,2,1,1,2,1,1]
+    
+    storm_child_stroke_count = [4,0,7]
+    storm_child_trig_count = [8,0,10]
     
     storm_dim = 'nstorms'
     flash_dim = 'nflashes'
@@ -33,9 +36,11 @@ def get_four_level_data():
         'trig_parent_stroke_id': (trig_dim, trig_parent_stroke_id),
         'trig_parent_flash_id': (trig_dim, trig_parent_flash_id),
         'trig_parent_storm_id': (trig_dim, trig_parent_storm_id),
-        'storm_child_count': (storm_dim, storm_child_count),
-        'flash_child_count': (flash_dim, flash_child_count),
-        'stroke_child_count': (stroke_dim, stroke_child_count),
+        'storm_child_flash_count': (storm_dim, storm_child_flash_count),
+        'storm_child_stroke_count': (storm_dim, storm_child_stroke_count),
+        'storm_child_trig_count': (storm_dim, storm_child_trig_count),
+        'flash_child_stroke_count': (flash_dim, flash_child_stroke_count),
+        'stroke_child_trig_count': (stroke_dim, stroke_child_trig_count),
         })
     d = d.set_coords(['stroke_id', 'flash_id', 'storm_id', 'trig_id', 
                       'stroke_parent_flash_id', 'trig_parent_stroke_id', 
@@ -43,9 +48,11 @@ def get_four_level_data():
     assert len(flash_id) == len(flash_parent_storm_id)
     assert len(stroke_id) == len(stroke_parent_flash_id)
     assert len(trig_id) == len(trig_parent_stroke_id)
-    assert sum(storm_child_count) == len(flash_id)
-    assert sum(flash_child_count) == len(stroke_id)
-    assert sum(stroke_child_count) == len(trig_id)
+    assert sum(storm_child_flash_count) == len(flash_id)
+    assert sum(storm_child_stroke_count) == len(stroke_id)
+    assert sum(storm_child_trig_count) == len(trig_id)
+    assert sum(flash_child_stroke_count) == len(stroke_id)
+    assert sum(stroke_child_trig_count) == len(trig_id)
     return d
 
 def get_sample_data_path():

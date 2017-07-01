@@ -26,10 +26,9 @@ def test_flash_id_sanity():
 def test_flash_ids_for_events():
     glm, flash_ids = get_test_dataset()
     
-    flash_data = glm.get_flashes(flash_ids)
-    flash_ids_for_events = glm.flash_id_for_events(flash_data)
+    flash_ids_for_events = glm.dataset['event_parent_flash_id'].data
     
-    n_events = flash_data.dims['number_of_events']
+    n_events = glm.dataset.dims['number_of_events']
     assert_equal(flash_ids_for_events.shape[0], n_events)
     
     unq_fl_ids = np.unique(flash_ids_for_events)
