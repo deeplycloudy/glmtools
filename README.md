@@ -33,9 +33,9 @@ See the examples folder. `plot_glm_test_data.ipynb` is a good place to start.
 ```python
 from glmtools.test.common import get_test_dataset
 glm, flash_ids = get_test_dataset()
-glmtools.io.glm.GLMDataset.dataset['flash_child_event_count'] > 2
+fl_idx = glm.dataset['flash_child_event_count'] > 2
 flash_ids = glm.dataset[{glm.fl_dim: fl_idx}].flash_id.data
-smaller_dataset = glmtools.io.glm.GLMDataset.get_flashes[flash_ids]
+smaller_dataset = glm.get_flashes(flash_ids)
 print(smaller_dataset)
 ```
 The same logic can be used to find big flashes.
