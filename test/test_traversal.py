@@ -14,6 +14,20 @@ def get_four_level_data_traversal():
                    'trig_parent_stroke_id')
     traversal = OneToManyTraversal(d, entity_vars, parent_vars)
     return d, traversal
+    
+def test_count_children():
+    d, traversal = get_four_level_data_traversal()
+    storm_child_count = d['storm_child_count'].data
+    flash_child_count = d['flash_child_count'].data
+    stroke_child_count = d['stroke_child_count'].data
+
+    n_storms = traversal.count_children('storm_id')
+    assert_equal(storm_child_count, n_storms)
+    n_flashes = traversal.count_children('flash_id')
+    assert_equal(flash_child_count, n_flashes)
+    n_strokes = traversal.count_children('stroke_id')
+    assert_equal(stroke_child_count, n_strokes)
+
 
 def test_replicate_parent_ids():
     d, traversal = get_four_level_data_traversal()

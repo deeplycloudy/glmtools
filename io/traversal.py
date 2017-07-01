@@ -95,9 +95,25 @@ class OneToManyTraversal(object):
 
     def count_children(self, entity_id_var):
         """ Count the children of entity_id_var
+        
+        e.g., for every flash id, we want a column of how many 
+        children (strokes) it has. 
+        stroke_parent_flash_id will have replicated flash_ids, and so 
+        if we use every flash_id to 
+        
+        this is the inverse problem of 
         """
-        # Look up the 
-        pass
+        count_next = False
+        for e_var, p_var in self._descend():
+            if count_next == True:
+                grouper = self.parent_groups[p_var].groups
+                count = [len(grouper[eid]) if (eid in grouper) else 0
+                         for eid in last_entity_ids]
+                count_next = False
+            if e_var == entity_id_var:
+                count_next = True
+                last_entity_ids = self.dataset[e_var].data
+        return np.asarray(count)
     
     def replicate_parent_ids(self, entity_id_var, parent_id_var):
         """ Ascend from the level of parent_id_var to entity_id_var,
