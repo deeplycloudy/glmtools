@@ -102,6 +102,7 @@ class GLMDataset(OneToManyTraversal):
     def __init__(self, filename):
         """ filename is any data source which works with xarray.open_dataset """
         dataset = xr.open_dataset(filename)
+        self._filename = filename
 
         self.fov_dim = 'number_of_field_of_view_bounds'
         self.wave_dim = 'number_of_wavelength_bounds'
@@ -155,7 +156,7 @@ class GLMDataset(OneToManyTraversal):
         # we can use event_parent_flash_id to get the flash_child_event_count
         # need a new groupby on event_parent_flash_id
         # then count number of flash_ids that match in the groupby
-        # probably would be a good idea to add this to the 
+        # probably would be a good idea to add this to the traversal class
         grouper = self.dataset.groupby('event_parent_flash_id').groups
         count = [len(grouper[eid]) if (eid in grouper) else 0
                  for eid in self.dataset['flash_id'].data]
@@ -192,7 +193,7 @@ class GLMDataset(OneToManyTraversal):
         good = ((self.dataset.flash_lat < lat_range[1]) & 
                 (self.dataset.flash_lat > lat_range[0]) &
                 (self.dataset.flash_lon < lon_range[1]) & 
-                (self.dataset.flash_lat > lon_range[0])
+                (self.dataset.flash_lon > lon_range[0])
                 ).data
         flash_ids = self.dataset.flash_id[good].data
         return self.get_flashes(flash_ids)

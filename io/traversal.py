@@ -148,6 +148,10 @@ class OneToManyTraversal(object):
             along that parent entity's dimension.
         
             returns replicated_parent_ids
+
+            TODO: args should really be:
+            replicate_to_dim
+            replicate_var -> replicate_from_dim
         """
         # Work from bottom up.
         # First, wait until the parent_id_var is reached
@@ -213,7 +217,7 @@ class OneToManyTraversal(object):
                 last_entity_ids = dataset[e_var].data
 
             # reset the indexer
-            indexer = {}                    
+            indexer = {}
             if e_var == entity_id_var:
                 # start pruning once we reach the level of entity_id_var
                 # At that level, we index on the entity itself, not the parent
