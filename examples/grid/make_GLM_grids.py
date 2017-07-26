@@ -42,6 +42,12 @@ parser.add_argument('--width', metavar='distance in km',
 parser.add_argument('--height', metavar='distance in km', 
                     dest='height', action='store', default=400.0,
                     help='total height of the grid')
+parser.add_argument('--nevents', metavar='minimum events per flash', 
+                    dest='min_events', action='store', default=1,
+                    help='total height of the grid')
+parser.add_argument('--ngroups', metavar='minimum groups per flash', 
+                    dest='min_groups', action='store', default=1,
+                    help='total height of the grid')
 parser.add_argument('--lma', dest='is_lma', 
                     action='store_true', default='store_false',
                     help='grid LMA h5 files instead of GLM data')
@@ -60,6 +66,15 @@ import os
 
 from lmatools.grid.make_grids import write_cf_netcdf_latlon, dlonlat_at_grid_center, grid_h5flashfiles
 from glmtools.grid.make_grids import grid_GLM_flashes
+
+# When passed None for the minimum event or group counts, the gridder will skip 
+# the check, saving a bit of time.
+min_events = int(args.min_events)
+if min_events <= 1:
+    min_events = None
+min_groups = int(args.min_groups)
+if min_groups <= 1:
+    min_groups = None
 
 start_time = datetime.strptime(args.start[:19], '%Y-%m-%dT%H:%M:%S')
 end_time = datetime.strptime(args.end[:19], '%Y-%m-%dT%H:%M:%S')
@@ -98,10 +113,9 @@ else:
     
 gridder(glm_filenames, start_time, end_time, proj_name='latlong',
         base_date = date, do_3d=False,
-        dx=dx, dy=dy, frame_interval=frame_interval,
-        #dz=dz, z_bnd=z_bnd_km,
-        x_bnd=x_bnd, y_bnd=y_bnd, 
+        dx=dx, dy=dy, frame_interval=frame_interval, x_bnd=x_bnd, y_bnd=y_bnd, 
         ctr_lat=ctr_lat, ctr_lon=ctr_lon, outpath = outpath,
+        min_points_per_flash = min_events, min_groups_per_flash = min_groups,
         output_writer = write_cf_netcdf_latlon,
         output_filename_prefix=output_filename_prefix, spatial_scale_factor=1.0
         )

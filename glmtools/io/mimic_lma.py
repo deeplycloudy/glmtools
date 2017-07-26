@@ -24,14 +24,9 @@ def sec_since_basedate(t64, basedate):
     return t
 
 def _fake_lma_from_glm(flash_data, basedate):
-    """ flash_data is an xarray record of flashes, groups, and events for a 
-        single lightning flash.
-    
-        flash_data can be generated with the mimic_lma_dataset in this module.
-        Crucially, that funciton uses the GLMDataset object to add flash IDs
-        to the flash_data structure, as below:
-        event_parent_flash_id = glm.flash_id_for_events(flash_data)
-        flash_data['event_parent_flash_id']=xr.DataArray(event_parent_flash_id, dims=[glm.ev_dim])
+    """ `flash_data` is an xarray dataset of flashes, groups, and events for
+         (possibly more than one) lightning flash. `flash_data` can be generated
+         with `GLMDataset.subset_flashes` or `GLMDataset.get_flashes`.
     """
     # These are the dtypes in the LMA HDF5 data files
     event_dtype=[('flash_id', '<i4'), 
@@ -97,16 +92,7 @@ def _fake_lma_from_glm(flash_data, basedate):
 
 
 
-def mimic_lma_dataset(glm, basedate, flash_ids=None, lon_range=None, lat_range=None):
-    """ Mimic the LMA data structure from GLM """
-    
-    if ((lon_range is not None) | (lat_range is not None)):
-        flash_data = glm.lonlat_subset(lon_range=lon_range, lat_range=lat_range)
-
-    elif flash_ids is not None:
-        flash_data = glm.get_flashes(flash_ids)
-    else:
-        flash_data = glm.dataset
-            
+def mimic_lma_dataset(flash_data, basedate):
+    """ Mimic the LMA data structure from GLM """        
     events, flashes = _fake_lma_from_glm(flash_data, basedate)
     return events, flashes

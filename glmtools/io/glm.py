@@ -98,6 +98,19 @@ glm_unsigned_vars = glm_unsigned_float_vars + (
 'group_parent_flash_id',
 )
 
+def event_areas(flash_data):
+    """ Given `flash_data`, which may be a subset of a `GLMDataset.dataset`,
+        calculate the area for each event in `flash_data`. The calculation is:
+    
+        `event_area` = `group_area` / `n_events`    
+    """
+    event_count = flash_data.group_child_event_count
+    group_area = flash_data.group_area
+    event_area = event_count / group_area
+    # need logic here to replicate the event_area to all events.
+
+
+
 class GLMDataset(OneToManyTraversal):
     def __init__(self, filename):
         """ filename is any data source which works with xarray.open_dataset """
@@ -174,28 +187,36 @@ class GLMDataset(OneToManyTraversal):
         return lon_bnd,lat_bnd
 
         
-    def lonlat_subset(self, lon_range=None, lat_range=None):
-        """ Subset the dataset based on longitude, latitude bounding box. 
+    def subset_flashes(self, lon_range=None, lat_range=None, 
+               min_events=None, min_groups=None):
+        """ Subset the dataset based on longitude, latitude, the minimum
+            number of events per flash, and/or the minimum number of groups 
+            per flash.
             
-            Applies subsetting only the the flashes, and then retrieves all events and
-            groups that go with those flash ids. 
+            Applies subsetting only the the flashes, and then retrieves all 
+            events and groups that go with those flash ids. 
             
             If a flash's centroid is within the bounding box by has events that straddle
             the bounding box edge, all events will still be returned. Same goes for
             groups. Therefore, the group and event locations are not strictly within 
             the bounding box.
         """
-        if lon_range is None:
-            lon_range = (-180., 180.)
-        if lat_range is None:
-            lat_range = (-90., 90.)
+        good = np.ones(self.dataset.flash_id.shape[0], dtype=bool)
+        flash_data = self.dataset
+        
+        if lon_range is not None:
+            good &= ((flash_data.flash_lon < lon_range[1]) & 
+                     (flash_data.flash_lon > lon_range[0])).data
+        if lat_range is not None:
+            good &= ((flash_data.flash_lat < lat_range[1]) & 
+                     (flash_data.flash_lat > lat_range[0])).data
             
-        good = ((self.dataset.flash_lat < lat_range[1]) & 
-                (self.dataset.flash_lat > lat_range[0]) &
-                (self.dataset.flash_lon < lon_range[1]) & 
-                (self.dataset.flash_lon > lon_range[0])
-                ).data
-        flash_ids = self.dataset.flash_id[good].data
+        if min_events is not None:
+            good &= (flash_data.flash_child_event_count >= min_events).data
+        if min_groups is not None:
+            good &= (flash_data.flash_child_group_count >= min_groups).data
+                
+        flash_ids = flash_data.flash_id[good].data
         return self.get_flashes(flash_ids)
     
     def get_flashes(self, flash_ids):
