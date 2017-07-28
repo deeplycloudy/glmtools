@@ -112,8 +112,22 @@ def event_areas(flash_data):
 
 
 class GLMDataset(OneToManyTraversal):
-    def __init__(self, filename):
-        """ filename is any data source which works with xarray.open_dataset """
+    def __init__(self, filename, calculate_parent_child=True):
+        """ filename is any data source which works with xarray.open_dataset
+            
+            By default, helpful additional parent-child data are calculated,
+                'event_parent_flash_id'
+                'flash_child_group_count'
+                'flash_child_event_count'
+                'group_child_event_count'
+            and a MultiIndex is set on the dataset.
+            Setting `calculate_parent_child=False` avoids the traversal of the
+            dataset needed to computate these values. This can be useful when
+            one only needs to grab an attribute or two (such as the 
+            `product_time`) from the original files. In this state, the only 
+            safe route is to access `self.dataset` directly. Other methods of 
+            this class are not guaranteed to work.
+        """
         dataset = xr.open_dataset(filename)
         self._filename = filename
 
@@ -138,11 +152,13 @@ class GLMDataset(OneToManyTraversal):
         self.entity_ids = ['flash_id', 'group_id', 'event_id']
         self.parent_ids = ['group_parent_flash_id', 'event_parent_group_id']
 
-        # sets self.dataset
-        super().__init__(dataset.set_index(**idx), 
-                         self.entity_ids, self.parent_ids)
-
-        self.__init_parent_child_data()
+        if calculate_parent_child:
+            # sets self.dataset
+            super().__init__(dataset.set_index(**idx), 
+                             self.entity_ids, self.parent_ids)
+            self.__init_parent_child_data()
+        else:
+            self.dataset = dataset
     
     def __init_parent_child_data(self):
         """ Calculate implied parameters that are useful for analyses

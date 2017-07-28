@@ -1,34 +1,10 @@
 """ Gridding of GLM data built on lmatools
 
 """
-from glmtools.io.mimic_lma import mimic_lma_dataset
+from glmtools.io.mimic_lma import read_flashes
 from glmtools.io.glm import GLMDataset
 from lmatools.grid.make_grids import FlashGridder
 import sys
-
-def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
-                 min_events=None, min_groups=None):
-    """ This routine is the data pipeline source, responsible for pushing out 
-        events and flashes. Using a different flash data source format is a matter of
-        replacing this routine to read in the necessary event and flash data."""
-    
-    if ((lon_range is not None) | (lat_range is not None) |
-        (min_events is not None) | (min_groups is not None)):
-        # only subset if we have to
-        flash_data = glm.subset_flashes(lon_range=lon_range, lat_range=lat_range,
-                        min_events=min_events, min_groups=min_groups)
-    else:
-        flash_data = glm.dataset
-
-    try:
-        events, flashes = mimic_lma_dataset(flash_data, base_date)
-        if events.shape[0] >= 1:
-            target.send((events, flashes))
-            del events, flashes
-    except KeyError as ke:
-        err_txt = 'Skipping {0}\n    ... assuming a flash, group, or event with id {1} does not exist'
-        print(err_txt.format(glm.dataset.dataset_name, ke))
-
     
 class GLMGridder(FlashGridder):
     def process_flashes(self, glm, x_bnd=None, y_bnd=None, 

@@ -2,6 +2,11 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
+from glmtools.io.glm import GLMDataset
+from lmatools.io.LMA_h5_file import LMAh5Collection
+from lmatools.lasso.cell_lasso_timeseries import TimeSeriesGenericFlashSubset
+from lmatools.lasso.energy_stats import TimeSeriesPolygonLassoFilter 
+
 # from glmtools.io.glm import fix_unsigned
 def fix_unsigned(arg):
     return arg
@@ -14,6 +19,37 @@ def fix_unsigned(arg):
 # for events, flashes in h5s: # get a stream of events, flashes 
 #     print events.dtype
 #     print flashes.dtype
+
+def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
+                 min_events=None, min_groups=None):
+    """ This routine is the data pipeline source, responsible for pushing out 
+        events and flashes. Using a different flash data source format is a matter of
+        replacing this routine to read in the necessary event and flash data.
+        
+        If target is not None, target is treated as an lmatools coroutine
+        data source. Otherwise, return `(events, flashes)`.
+     """
+    
+    if ((lon_range is not None) | (lat_range is not None) |
+        (min_events is not None) | (min_groups is not None)):
+        # only subset if we have to
+        flash_data = glm.subset_flashes(lon_range=lon_range, lat_range=lat_range,
+                        min_events=min_events, min_groups=min_groups)
+    else:
+        flash_data = glm.dataset
+
+    try:
+        events, flashes = mimic_lma_dataset(flash_data, base_date)
+        if target is not None:
+            if events.shape[0] >= 1:
+                target.send((events, flashes))
+                del events, flashes
+        else:
+            return events, flashes
+    except KeyError as ke:
+        err_txt = 'Skipping {0}\n    ... assuming a flash, group, or event with id {1} does not exist'
+        print(err_txt.format(glm.dataset.dataset_name, ke))
+
 
 def sec_since_basedate(t64, basedate):
     """ given a numpy datetime 64 object, and a datetime basedate, 
@@ -96,3 +132,93 @@ def mimic_lma_dataset(flash_data, basedate):
     """ Mimic the LMA data structure from GLM """        
     events, flashes = _fake_lma_from_glm(flash_data, basedate)
     return events, flashes
+
+
+
+class GLMncCollection(LMAh5Collection):
+    """ Mimic the the events, flashes and time selection behavior of 
+        LMAh5Collection but with GLM data files instead. 
+        kwarg min_points is used for the minimum number of events and
+        min_groups is used for the minimum number of groups.
+    """
+    def __init__(self, *args, **kwargs):
+        self.min_groups = kwargs.pop('min_groups', None)
+        self.lat_range = kwargs.pop('lat_range', None)
+        self.lon_range = kwargs.pop('lon_range', None)
+        super().__init__(*args, **kwargs)
+
+    def _table_times_for_file(self, fname):
+        """ Called once by init to set up frame lookup tables and yield 
+            the frame start times. _time_lookup goes from 
+            datetime->(h5 filename, table_name).
+        """
+        print('got time for {0}'.format(fname))
+        glm = GLMDataset(fname, calculate_parent_child=False)
+        # Get the time, using 'seconds' resolution because GLM files are
+        # produced on 20 s boundaries (or any number of even seconds)
+        t_start = glm.dataset.product_time.data.astype('M8[s]').astype('O')
+        # In the LMA API, we track the table name in the H5 file that goes
+        # with the time. No such thing exists for GLM data.
+        self._time_lookup[t_start] = (fname, None)
+        yield t_start
+
+    def data_for_time(self, t0):
+        """ Return events, flashes whose start time matches datetime t0.
+        
+        events['time'] and flashes['start'] are corrected if necessary
+        to be referenced with respect to self.base_date.
+        """
+        fname, table_name = self._time_lookup[t0]
+        glm = GLMDataset(fname)
+        events, flashes = read_flashes(glm, None, base_date=self.base_date,
+                                       min_events=self.min_points,
+                                       min_groups=self.min_groups,
+                                       lon_range=self.lon_range, 
+                                       lat_range=self.lat_range)
+        print('data from {0}'.format(fname))
+        return events, flashes
+        
+class TimeSeriesGLMFlashSubset(TimeSeriesGenericFlashSubset):
+    def __init__(self, glm_filenames, t_start, t_end, dt, base_date=None, 
+                    min_events=None, min_groups=None, 
+                    lon_range=None, lat_range=None):
+        super(TimeSeriesGLMFlashSubset, self).__init__(t_start, t_end, dt, 
+                                                    base_date=None)
+        self.lma = GLMncCollection(glm_filenames, base_date=self.base_date,
+                                   min_points=min_events, min_groups=min_groups,
+                                   lat_range=lat_range, lon_range=lon_range)
+                                   
+class TimeSeriesGLMPolygonFlashSubset(TimeSeriesGLMFlashSubset):
+    # This duplicates all the code from 
+    # lmatools.lasso.cell_lasso_timeseries.TimeSeriesPolygonFlashSubset
+    # The only change is the superclass and class name.
+    # There's surely a way to do this more elegantly.
+    def __init__(self, *args, **kwargs):
+        # could also accept coord_names and time_key kwargs here, but those
+        # should be standardized in the lmatools h5 format, so we hard code
+        # them below
+        self.polys = kwargs.pop('polys', [])
+        self.t_edges_polys = kwargs.pop('t_edges_polys', [])
+
+        super(TimeSeriesGLMPolygonFlashSubset, self).__init__(*args, **kwargs)
+        
+        # strictly speaking, we don't even need the time series part; that's been done
+        # and we're just lassoin' the points. 
+        # But, this code is known to work, so we just reuse it here.
+        self.fl_lassos = TimeSeriesPolygonLassoFilter(coord_names=('init_lon', 'init_lat'), time_key='start',
+                                         time_edges=self.t_edges_polys, polys=self.polys, basedate=self.base_date )
+        self.ev_lassos = TimeSeriesPolygonLassoFilter(coord_names=('lon', 'lat'), time_key='time',
+                                         time_edges=self.t_edges_polys, polys=self.polys, basedate=self.base_date)
+        self.grid_lassos = TimeSeriesPolygonLassoFilter(coord_names=('lon', 'lat'), time_key='t',
+                                         time_edges=self.t_edges_polys, polys=self.polys, basedate=self.base_date)
+    
+    def gen_chopped_events_flashes(self, *args, **kwargs):
+        parent = super(TimeSeriesGLMPolygonFlashSubset, self)
+        for ch_ev_series, ch_fl_series in parent.gen_chopped_events_flashes(*args, **kwargs):
+            # This gives a time series for each HDF5 LMA file. Next loop
+            # over each chopped time series window.
+            # Apply polygon filter to time series created by superclass, yield chopped events and flashes
+            lassoed_ev = [ch_ev[self.ev_lassos.filter_mask(ch_ev)] for ch_ev in ch_ev_series]
+            lassoed_fl = [ch_fl[self.fl_lassos.filter_mask(ch_fl)] for ch_fl in ch_fl_series]
+            yield lassoed_ev, lassoed_fl
+            
