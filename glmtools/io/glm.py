@@ -1,10 +1,43 @@
 import itertools
+from datetime import datetime, timedelta
 
 import numpy as np
 import xarray as xr
 
 from glmtools.io.traversal import OneToManyTraversal
 
+def parse_glm_filename_time(time_str):
+        """ Given an input time string like
+            s20171880000200
+            e20171880000400
+            c20171880000426
+            parse the time, including the tenths of a second at the end.
+        """
+        # The filename convention for julian day is day of year, 001-366
+        # This matches the strptime convention. See Appendix A to GOES-R PUG
+        # Volume 5.
+        start = datetime.strptime(time_str[1:-1], '%Y%j%H%M%S')
+        start_tenths = int(time_str[-1])
+        start += timedelta(0, start_tenths/10.0)
+        return start
+
+def parse_glm_filename(filename):
+    """ Parse the GLM filename, reutrning (`ops_environment`, `algorithm`, 
+            `platform`, `start`, `end`, `created`)
+        The last three values returned are datetime objects.
+        
+        See Appendix A to the GOES-R PUG Volume 5 for the filename spec.
+        OR_GLM-L2-LCFA_G16_s20171880000200_e20171880000400_c20171880000426.nc
+    """
+    parts = filename.replace('.nc', '').split('_')
+    ops_environment = parts[0]
+    algorithm = parts[1]
+    platform = parts[2]        
+    start = parse_glm_filename_time(parts[3])
+    end = parse_glm_filename_time(parts[4])
+    created = parse_glm_filename_time(parts[5])
+    return ops_environment, algorithm, platform, start, end, created
+        
 def fix_unsigned(data, is_xarray=True):
     """
     The function is used to fix data written as signed integer bytes
@@ -108,8 +141,6 @@ def event_areas(flash_data):
     group_area = flash_data.group_area
     event_area = event_count / group_area
     # need logic here to replicate the event_area to all events.
-
-
 
 class GLMDataset(OneToManyTraversal):
     def __init__(self, filename, calculate_parent_child=True):

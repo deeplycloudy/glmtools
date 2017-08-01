@@ -1,6 +1,7 @@
 
 import argparse
-parse_desc = """Grid GLM flash data
+parse_desc = """Grid GLM flash data. The start and end times can be specified
+independently, or if not provided they will be inferred from the filenames.
 
 Grid spacing is regular in latitude and longitude with the grid box
 being correctly sized at the center of the grid.
@@ -16,38 +17,38 @@ parser.add_argument(dest='filenames',metavar='filename', nargs='*')
 parser.add_argument('-o', '--output_dir', metavar='directory', required=True,
                     dest='outdir', action='store', )
 parser.add_argument('--ctr_lat', metavar='latitude', required=True,
-                    dest='ctr_lat', action='store',
+                    dest='ctr_lat', action='store', type=float,
                     help='center latitude')
 parser.add_argument('--ctr_lon', metavar='longitude', required=True,
-                    dest='ctr_lon', action='store',
+                    dest='ctr_lon', action='store', type=float,
                     help='center longitude')
-parser.add_argument('--start', metavar='yyyy-mm-ddThh:mm:ss', required=True,
+parser.add_argument('--start', metavar='yyyy-mm-ddThh:mm:ss',
                     dest='start', action='store', 
                     help='UTC start time, e.g., 2017-07-04T08:00:00')
-parser.add_argument('--end', metavar='yyyy-mm-ddThh:mm:ss', required=True,
+parser.add_argument('--end', metavar='yyyy-mm-ddThh:mm:ss',
                     dest='end', action='store', 
                     help='UTC end time, e.g., 2017-07-04T09:00:00')
 parser.add_argument('--dx', metavar='km', 
-                    dest='dx', action='store', default=10.0,
+                    dest='dx', action='store', default=10.0, type=float,
                     help='approximate east-west grid spacing')
 parser.add_argument('--dy', metavar='km', 
-                    dest='dy', action='store', default=10.0,
+                    dest='dy', action='store', default=10.0, type=float,
                     help='approximate north-south grid spacing')
 parser.add_argument('--dt', metavar='seconds', 
-                    dest='dt', action='store', default=60.0,
+                    dest='dt', action='store', default=60.0, type=float,
                     help='frame duration')
 parser.add_argument('--width', metavar='distance in km', 
-                    dest='width', action='store', default=400.0,
+                    dest='width', action='store', default=400.0, type=float,
                     help='total width of the grid')
 parser.add_argument('--height', metavar='distance in km', 
-                    dest='height', action='store', default=400.0,
+                    dest='height', action='store', default=400.0, type=float,
                     help='total height of the grid')
-parser.add_argument('--nevents', metavar='minimum events per flash', 
+parser.add_argument('--nevents', metavar='minimum events per flash', type=int,
                     dest='min_events', action='store', default=1,
-                    help='total height of the grid')
-parser.add_argument('--ngroups', metavar='minimum groups per flash', 
+                    help='minimum number of events per flash')
+parser.add_argument('--ngroups', metavar='minimum groups per flash', type=int,
                     dest='min_groups', action='store', default=1,
-                    help='total height of the grid')
+                    help='minimum number of groups per flash')
 parser.add_argument('--lma', dest='is_lma', 
                     action='store_true', default='store_false',
                     help='grid LMA h5 files instead of GLM data')
@@ -66,6 +67,7 @@ import os
 
 from lmatools.grid.make_grids import write_cf_netcdf_latlon, dlonlat_at_grid_center, grid_h5flashfiles
 from glmtools.grid.make_grids import grid_GLM_flashes
+from glmtools.io.glm import parse_glm_filename
 
 # When passed None for the minimum event or group counts, the gridder will skip 
 # the check, saving a bit of time.
@@ -76,9 +78,22 @@ min_groups = int(args.min_groups)
 if min_groups <= 1:
     min_groups = None
 
-start_time = datetime.strptime(args.start[:19], '%Y-%m-%dT%H:%M:%S')
-end_time = datetime.strptime(args.end[:19], '%Y-%m-%dT%H:%M:%S')
 glm_filenames = args.filenames
+base_filenames = [os.path.basename(p) for p in glm_filenames]
+filename_infos = [parse_glm_filename(f) for f in base_filenames]
+# opsenv, algorithm, platform, start, end, created = parse_glm_filename(f)
+filename_starts = [info[3] for info in filename_infos]
+filename_ends = [info[4] for info in filename_infos]
+
+from glmtools.io.glm import parse_glm_filename
+if args.start is not None:
+    start_time = datetime.strptime(args.start[:19], '%Y-%m-%dT%H:%M:%S')
+else:
+    start_time = min(filename_starts)
+if args.end is not None:
+    end_time = datetime.strptime(args.end[:19], '%Y-%m-%dT%H:%M:%S')
+else:
+    end_time = max(filename_ends)
 
 date = datetime(start_time.year, start_time.month, start_time.day)
 # grid_dir = os.path.join('/data/LCFA-production/', 'grid_test')
