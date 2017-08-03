@@ -152,7 +152,6 @@ class GLMncCollection(LMAh5Collection):
             the frame start times. _time_lookup goes from 
             datetime->(h5 filename, table_name).
         """
-        print('got time for {0}'.format(fname))
         glm = GLMDataset(fname, calculate_parent_child=False)
         # Get the time, using 'seconds' resolution because GLM files are
         # produced on 20 s boundaries (or any number of even seconds)

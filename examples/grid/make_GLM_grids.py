@@ -4,7 +4,7 @@ parse_desc = """Grid GLM flash data. The start and end times can be specified
 independently, or if not provided they will be inferred from the filenames.
 
 Grid spacing is regular in latitude and longitude with the grid box
-being correctly sized at the center of the grid.
+being sized to match the requested dx, dy at the center of the grid.
 
 Within the output directory, a year/month/day directory will be created,
 e.g., 2017/Jul/04/, and within that directory the grid files will be created.
@@ -68,6 +68,7 @@ import os
 from lmatools.grid.make_grids import write_cf_netcdf_latlon, dlonlat_at_grid_center, grid_h5flashfiles
 from glmtools.grid.make_grids import grid_GLM_flashes
 from glmtools.io.glm import parse_glm_filename
+from lmatools.io.LMA_h5_file import parse_lma_h5_filename
 
 # When passed None for the minimum event or group counts, the gridder will skip 
 # the check, saving a bit of time.
@@ -78,12 +79,21 @@ min_groups = int(args.min_groups)
 if min_groups <= 1:
     min_groups = None
 
+if args.is_lma:
+    filename_parser = parse_glm_filename
+    start_idx = 3
+    end_idx = 4
+else:
+    filename_parser = parse_lma_h5_filename
+    start_idx = 0
+    end_idx = 1
+    
 glm_filenames = args.filenames
 base_filenames = [os.path.basename(p) for p in glm_filenames]
-filename_infos = [parse_glm_filename(f) for f in base_filenames]
+filename_infos = [filename_parser(f) for f in base_filenames]
 # opsenv, algorithm, platform, start, end, created = parse_glm_filename(f)
-filename_starts = [info[3] for info in filename_infos]
-filename_ends = [info[4] for info in filename_infos]
+filename_starts = [info[start_idx] for info in filename_infos]
+filename_ends = [info[end_idx] for info in filename_infos]
 
 from glmtools.io.glm import parse_glm_filename
 if args.start is not None:
@@ -119,7 +129,7 @@ dx, dy, x_bnd, y_bnd = dlonlat_at_grid_center(ctr_lat, ctr_lon,
 print(x_bnd, y_bnd)
 
 
-if args.is_lma == True:
+if args.is_lma:
     gridder = grid_h5flashfiles
     output_filename_prefix='LMA'
 else:
