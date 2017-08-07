@@ -1,17 +1,7 @@
 #!/usr/bin/env python
 import argparse
-parse_desc = """
-USAGE
-python cell-lasso-stats.py path_to_lasso_log.txt path_to_sort_results outdir
-
-EXAMPLE
-# python cell-lasso-stats.py  /data/LCFA-production/LMApost/flashsort lassotest1
-first argument is min flash width in km. it is appended to the last argument to distinguish runs.
-
-cd /data/LCFA-production
-glm-lasso-stats-20170429.py --skip3d -l lasso-over-WTLMA.txt -s /data/LCFA-production/GLMstats/ -o lassotest1 /data/LCFA-production/GLM-L2-LCFA_G16_s20170429/OR_GLM-L2-LCFA_G16_s201711906[0-1]*.nc
-
-"""
+parse_desc = """Calculate flash statistics within a (possibly time-evolving) 
+polygon, optionally filtering on a variety of flash parameters."""
 
 lasso_log_help = """ path_to_lasso_log.txt is a path to a log file of cell
 lassos in json format, as created by the grid analysis GUI notebook that
@@ -40,6 +30,14 @@ parser.add_argument('-o', '--output_dir', metavar='directory', required=True,
 parser.add_argument('-l', '--lasso', metavar='filename', required=True,
                     dest='lasso_log', action='store',
                     help=lasso_log_help)
+parser.add_argument('--minalt', metavar='float km',
+                    type=float, dest='min_alt', action='store', default=-1.0)
+parser.add_argument('--maxalt', metavar='float km',
+                    type=float, dest='max_alt', action='store', default=100.0)
+parser.add_argument('--minenergy', metavar='float',
+                    type=float, dest='min_energy', action='store', default=0.0)
+parser.add_argument('--maxenergy', metavar='float',
+                    type=float, dest='max_energy', action='store', default=1.0e38)
 parser.add_argument('-a', '--minarea', metavar='float km^2',
                     type=float, dest='min_area', action='store', default=0.0)
 parser.add_argument('-A', '--maxarea', metavar='float km^2',
@@ -57,6 +55,10 @@ args = parser.parse_args()
 
 min_area = args.min_area
 max_area = args.max_area
+min_alt = args.min_alt * 1000.0
+max_alt = args.max_alt * 1000.0
+min_energy = args.min_energy
+max_energy = args.max_energy
 
 min_events = args.min_events
 if min_events < 2:
@@ -151,7 +153,11 @@ def gen_filtered_time_series(events_series, flashes_series, bounds):
         
         yield (events_filt, flashes_filt)
 
-bounds={'area':(min_area, max_area)} # used to remove flashes not meeting certain critera
+# used to remove flashes not meeting certain critera
+bounds={'area':(min_area, max_area),
+        'ctr_alt':(min_alt,max_alt),
+        'total_energy':(min_energy, max_energy)
+}
 filtered_time_series = gen_filtered_time_series(events_series, flashes_series, bounds)
 events_series, flashes_series = zip(*filtered_time_series)
 
@@ -208,7 +214,6 @@ else:
 def write_flash_volume(outfile, field):
     import xray as xr
     import pandas as pd
-    print(field.shape)
     dat = pd.DataFrame(field).T
     dat.to_csv(outfile)
 
@@ -454,7 +459,6 @@ for field_id in field_ids_to_run:
 
     fig=plt.figure(figsize=(12,10))
     lon_range, lat_range = polys_to_bounding_box(flashes_in_poly.polys)
-    print(lon_range,lat_range)
     axis_range = lon_range+lat_range
 
     for t, xedge, yedge, data in gfc:

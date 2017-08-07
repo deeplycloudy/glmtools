@@ -50,7 +50,7 @@ parser.add_argument('--ngroups', metavar='minimum groups per flash', type=int,
                     dest='min_groups', action='store', default=1,
                     help='minimum number of groups per flash')
 parser.add_argument('--lma', dest='is_lma', 
-                    action='store_true', default='store_false',
+                    action='store_true', 
                     help='grid LMA h5 files instead of GLM data')
 # parser.add_argument('-v', dest='verbose', action='store_true',
                     # help='verbose mode')
@@ -80,13 +80,13 @@ if min_groups <= 1:
     min_groups = None
 
 if args.is_lma:
-    filename_parser = parse_glm_filename
-    start_idx = 3
-    end_idx = 4
-else:
     filename_parser = parse_lma_h5_filename
     start_idx = 0
     end_idx = 1
+else:
+    filename_parser = parse_glm_filename
+    start_idx = 3
+    end_idx = 4
     
 glm_filenames = args.filenames
 base_filenames = [os.path.basename(p) for p in glm_filenames]
@@ -135,12 +135,16 @@ if args.is_lma:
 else:
     gridder = grid_GLM_flashes
     output_filename_prefix='GLM'
-    
-gridder(glm_filenames, start_time, end_time, proj_name='latlong',
+
+grid_kwargs=dict(proj_name='latlong',
         base_date = date, do_3d=False,
         dx=dx, dy=dy, frame_interval=frame_interval, x_bnd=x_bnd, y_bnd=y_bnd, 
         ctr_lat=ctr_lat, ctr_lon=ctr_lon, outpath = outpath,
-        min_points_per_flash = min_events, min_groups_per_flash = min_groups,
+        min_points_per_flash = min_events,
         output_writer = write_cf_netcdf_latlon,
-        output_filename_prefix=output_filename_prefix, spatial_scale_factor=1.0
-        )
+        output_filename_prefix=output_filename_prefix, spatial_scale_factor=1.0)
+if min_groups is not None:
+    grid_kwargs['min_groups_per_flash'] = min_groups
+if args.is_lma:
+    grid_kwargs['energy_grids'] = True
+gridder(glm_filenames, start_time, end_time, **grid_kwargs)
