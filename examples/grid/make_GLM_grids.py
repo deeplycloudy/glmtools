@@ -147,4 +147,6 @@ if min_groups is not None:
     grid_kwargs['min_groups_per_flash'] = min_groups
 if args.is_lma:
     grid_kwargs['energy_grids'] = True
+else:
+    grid_kwargs['energy_grids'] = ('total_energy',)
 gridder(glm_filenames, start_time, end_time, **grid_kwargs)
