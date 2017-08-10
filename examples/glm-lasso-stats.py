@@ -50,6 +50,8 @@ parser.add_argument('--ngroups', metavar='minimum groups per flash', type=int,
                     help='minimum number of groups per flash')
 parser.add_argument('--skip3d', dest='do_3d', action='store_false',
                     help='Skip calculations requiring 3D flash position data')
+parser.add_argument('--skipspectra', dest='do_energy_spectra', 
+                    action='store_false', help='Skip plots of energy spectra')
 
 args = parser.parse_args()
 
@@ -68,6 +70,7 @@ if min_groups < 2:
     min_groups = None
 
 do_3d = args.do_3d
+do_energy_spectra = args.do_energy_spectra
 use_standard_path = args.use_standard_path
 
 polylog = args.lasso_log
@@ -123,7 +126,8 @@ if use_standard_path:
     h5_filenames = h5_files_from_standard_path(path_to_sort_results, t_start, t_end)
 else:
     h5_filenames = input_filenames
-flashes_in_poly = TimeSeriesGLMPolygonFlashSubset(h5_filenames, t_start, t_end, dt, 
+flashes_in_poly = TimeSeriesGLMPolygonFlashSubset(h5_filenames, 
+                        t_start, t_end, dt, 
                         min_events=None, min_groups=None,
                         lon_range=(lonmin, lonmax),
                         lat_range=(latmin, latmax),
@@ -308,61 +312,62 @@ if do_3d:
 # =====
 # Energy spectrum plots
 # ====
-footprint_bin_edges = get_energy_spectrum_bins()
-spectrum_save_file_base = os.path.join(outdir, 'energy_spectrum_{0}_{1}.pdf')
-for flashes, t0, t1 in zip(flashes_series, flashes_in_poly.t_edges[:-1], flashes_in_poly.t_edges[1:]):
-    histo, edges = np.histogram(flashes['area'], bins=footprint_bin_edges)
-    spectrum_save_file = spectrum_save_file_base.format(t0.strftime('%y%m%d%H%M%S'),
-                                                        t1.strftime('%y%m%d%H%M%S'))
-    plot_energy_from_area_histogram(histo, edges,
-                    save=spectrum_save_file, duration=(t1-t0).total_seconds())
+if do_energy_spectra:
+    footprint_bin_edges = get_energy_spectrum_bins()
+    spectrum_save_file_base = os.path.join(outdir, 'energy_spectrum_{0}_{1}.pdf')
+    for flashes, t0, t1 in zip(flashes_series, flashes_in_poly.t_edges[:-1], flashes_in_poly.t_edges[1:]):
+        histo, edges = np.histogram(flashes['area'], bins=footprint_bin_edges)
+        spectrum_save_file = spectrum_save_file_base.format(t0.strftime('%y%m%d%H%M%S'),
+                                                            t1.strftime('%y%m%d%H%M%S'))
+        plot_energy_from_area_histogram(histo, edges,
+                        save=spectrum_save_file, duration=(t1-t0).total_seconds())
 
-# =========================================#
-# Energy Spectrum from charge density:     # 
-# =========================================#
-import matplotlib.pyplot as plt
-import matplotlib
-##Sets color bar for energy spectra plot:
-time_array = []
-for t in flashes_in_poly.t_edges:
-    time_array.append(str(t)[11:].replace(':',''))
-time_array = np.asarray(time_array).astype(float)
+    # =========================================#
+    # Energy Spectrum from charge density:     # 
+    # =========================================#
+    import matplotlib.pyplot as plt
+    import matplotlib
+    ##Sets color bar for energy spectra plot:
+    time_array = []
+    for t in flashes_in_poly.t_edges:
+        time_array.append(str(t)[11:].replace(':',''))
+    time_array = np.asarray(time_array).astype(float)
 
-norm = matplotlib.colors.Normalize(
-     vmin=time_array.min(),
-     vmax=time_array.max())
+    norm = matplotlib.colors.Normalize(
+         vmin=time_array.min(),
+         vmax=time_array.max())
 
-#ENERGY SPECTRA FOR TOTAL ENERGY:
-cmap_en = plt.cm.gist_heat
-s_m = plt.cm.ScalarMappable(cmap=cmap_en,norm=norm)
-s_m.set_array([])
+    #ENERGY SPECTRA FOR TOTAL ENERGY:
+    cmap_en = plt.cm.gist_heat
+    s_m = plt.cm.ScalarMappable(cmap=cmap_en,norm=norm)
+    s_m.set_array([])
 
-spectrum_save_file_base_en = os.path.join(outdir, 'energy_spectrum_estimate_{0}_{1}_new.pdf')
-which_energy = 'total_energy'
-title        = 'Total Energy'
-plot_energies(footprint_bin_edges,
-              time_array, s_m, flashes_series,
-              flashes_in_poly.t_edges,
-              spectrum_save_file_base_en,
-              which_energy,
-              title)
-
-# ENERGY SPECTRA FOR SPECIFIC ENERGY:
-if do_3d:
-    # Flash volume is required to do specific energy
-    cmap_specific_en = plt.cm.cubehelix
-    s_m2 = plt.cm.ScalarMappable(cmap=cmap_specific_en,norm=norm)
-    s_m2.set_array([])
-
-    spectrum_save_file_base_specific = os.path.join(outdir, 'specific_energy_spectrum_estimate_{0}_{1}_new.pdf')
-    which_energy = 'specific_energy'
-    title        = 'Specific Energy'
+    spectrum_save_file_base_en = os.path.join(outdir, 'energy_spectrum_estimate_{0}_{1}_new.pdf')
+    which_energy = 'total_energy'
+    title        = 'Total Energy'
     plot_energies(footprint_bin_edges,
-                  time_array, s_m2, flashes_series,
+                  time_array, s_m, flashes_series,
                   flashes_in_poly.t_edges,
-                  spectrum_save_file_base_specific,
+                  spectrum_save_file_base_en,
                   which_energy,
                   title)
+
+    # ENERGY SPECTRA FOR SPECIFIC ENERGY:
+    if do_3d:
+        # Flash volume is required to do specific energy
+        cmap_specific_en = plt.cm.cubehelix
+        s_m2 = plt.cm.ScalarMappable(cmap=cmap_specific_en,norm=norm)
+        s_m2.set_array([])
+
+        spectrum_save_file_base_specific = os.path.join(outdir, 'specific_energy_spectrum_estimate_{0}_{1}_new.pdf')
+        which_energy = 'specific_energy'
+        title        = 'Specific Energy'
+        plot_energies(footprint_bin_edges,
+                      time_array, s_m2, flashes_series,
+                      flashes_in_poly.t_edges,
+                      spectrum_save_file_base_specific,
+                      which_energy,
+                      title)
 
 # =====
 # NetCDF grid processing
