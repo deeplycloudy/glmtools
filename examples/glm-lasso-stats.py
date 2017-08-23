@@ -128,7 +128,7 @@ else:
     h5_filenames = input_filenames
 flashes_in_poly = TimeSeriesGLMPolygonFlashSubset(h5_filenames, 
                         t_start, t_end, dt, 
-                        min_events=None, min_groups=None,
+                        min_events=min_events, min_groups=min_groups,
                         lon_range=(lonmin, lonmax),
                         lat_range=(latmin, latmax),
                         polys=polys, t_edges_polys=t_edges_polys)
@@ -377,8 +377,7 @@ field_names = ('flash_extent', 'flash_initiation', 'lma_source', 'flash_footprin
 field_labels = ('Flash coverage (count per pixel)', 'Flash initation (count per pixel)', 'VHF Sources (count per pixel)',
                 'Average area (km^2)', 'Average Energy J/kg' 'Flash size standard deviation (count per pixel)', 'Average Total Energy (J)')
 grid_ranges = ((1, 1000), (1,100), (1, 10000),  (50, 100000), (1,1000), (1e5, 1e8), (1e-15, 1e-10))
-field_ids_to_run = (0, 1, 2, 3, 5, 6) #specific is 4, and is empty
-field_ids_to_run = []
+field_ids_to_run = (0, 1, 2, 3, 5, 6)
 
 def plot_lasso_grid_subset(fig,datalog, t,xedge,yedge,data,grid_lassos,field_name,basedate,grid_range, axis_range):
     from scipy.stats import scoreatpercentile
