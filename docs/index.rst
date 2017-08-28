@@ -33,6 +33,7 @@ to install those packages from source. From some working directory (e.g.,
    git clone https://github.com/pydata/xarray.git
    cd glmtools
    conda env create -f environment.yml
+   source activate glmval
    cd ../lmatools
    git checkout flashsortrefactor
    python setup.py install
@@ -46,6 +47,17 @@ to install those packages from source. From some working directory (e.g.,
 
 Recommended Analyses
 ====================
+
+Ensure you are in the anaconda environment created earlier
+----------------------------------------------------------
+Be sure to activate the ``conda`` environment that contains glmtools.
+
+If you are using the environment created by environment.yml, this environment will be named  ``glmval``:
+
+.. code-block:: bash
+
+   source activate glmval
+
 
 Get some GLM data, and check it for sanity
 ------------------------------------------
