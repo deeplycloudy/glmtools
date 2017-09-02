@@ -7,7 +7,7 @@ from lmatools.grid.make_grids import FlashGridder
 import sys
     
 class GLMGridder(FlashGridder):
-    def process_flashes(self, glm, x_bnd=None, y_bnd=None, 
+    def process_flashes(self, glm, lat_bnd=None, lon_bnd=None, 
                         min_points_per_flash=1, min_groups_per_flash=1):
         self.min_points_per_flash = min_points_per_flash
         if min_points_per_flash is None:
@@ -22,7 +22,7 @@ class GLMGridder(FlashGridder):
         read_flashes(glm, self.framer, base_date=self.t_ref, 
                      min_events=self.min_points_per_flash,
                      min_groups=self.min_groups_per_flash,
-                     lon_range=x_bnd, lat_range=y_bnd)
+                     lon_range=lon_bnd, lat_range=lat_bnd)
 
         
 def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
@@ -42,9 +42,14 @@ def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
         if prock in kwargs:
             process_flash_kwargs[prock] = kwargs.pop(prock)
     # need to also pass these kwargs through to the gridder for grid config.
-    process_flash_kwargs['x_bnd'] = kwargs['x_bnd']
-    process_flash_kwargs['y_bnd'] = kwargs['y_bnd']
-            
+    if kwargs['proj_name'] == 'latlong':
+        process_flash_kwargs['lon_bnd'] = kwargs['x_bnd']
+        process_flash_kwargs['lat_bnd'] = kwargs['y_bnd']
+    else:
+        # working with ccd pixels or a projection, so no known lat lon bnds
+        process_flash_kwargs['lon_bnd'] = None
+        process_flash_kwargs['lat_bnd'] = None
+        
     out_kwargs = {}
     for outk in ('outpath', 'output_writer', 'output_writer_3d', 'output_kwargs',
                  'output_filename_prefix', 'spatial_scale_factor'):
