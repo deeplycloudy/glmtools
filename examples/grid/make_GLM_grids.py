@@ -95,11 +95,15 @@ else:
     
 glm_filenames = args.filenames
 base_filenames = [os.path.basename(p) for p in glm_filenames]
-filename_infos = [filename_parser(f) for f in base_filenames]
-# opsenv, algorithm, platform, start, end, created = parse_glm_filename(f)
-filename_starts = [info[start_idx] for info in filename_infos]
-filename_ends = [info[end_idx] for info in filename_infos]
-
+try:
+    filename_infos = [filename_parser(f) for f in base_filenames]
+    # opsenv, algorithm, platform, start, end, created = parse_glm_filename(f)
+    filename_starts = [info[start_idx] for info in filename_infos]
+    filename_ends = [info[end_idx] for info in filename_infos]
+except ValueError:
+    print("One or more GLM files has a non-standard filename.")
+    print("    Assuming that --start and --end have been passed directly.")
+    
 from glmtools.io.glm import parse_glm_filename
 if args.start is not None:
     start_time = datetime.strptime(args.start[:19], '%Y-%m-%dT%H:%M:%S')
