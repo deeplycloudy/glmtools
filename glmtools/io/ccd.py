@@ -66,7 +66,7 @@ def read_pixel_location_mat_file(filename, lat_var='mean_lat', lon_var='mean_lon
     lons = np.ma.masked_array(lons, np.isnan(lons))-360
     return lons, lats
 
-def create_pixel_lookup(lons, lats):
+def create_pixel_lookup(lons, lats, leaf_size=40):
     """
     lons: 2D array of pixel center longitudes. Shape is (1300, 1372) for GLM.
     lats: 2D array of pixel center latitudes. Shape (1300, 1372) for GLM.
@@ -110,7 +110,7 @@ def create_pixel_lookup(lons, lats):
     flatlon = lons[good].flatten()
     flat_geo = np.vstack((flatlat, flatlon)).T
     # Benchmark using approach in https://jakevdp.github.io/blog/2013/04/29/benchmarking-nearest-neighbor-searches-in-python/
-    lookup = KDTree(flat_geo, leaf_size=40)
+    lookup = KDTree(flat_geo, leaf_size=leaf_size)
     return lookup, Xgood, Ygood
 
 def save_pixel_lookup(lookup, X, Y, lons, lats, filename=None):
