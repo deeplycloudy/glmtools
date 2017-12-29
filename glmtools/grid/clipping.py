@@ -101,7 +101,6 @@ class QuadMeshSubset(object):
         if Y_ctr is None:
             Y_ctr = (yedge[:-1, :-1] + yedge[1:, 1:] +
                      yedge[1:, :-1] + yedge[:-1, 1:])/4.0
-        self.xyedge = np.dstack((xedge, yedge))
         self.X_ctr = X_ctr
         self.Y_ctr = Y_ctr
         
@@ -133,14 +132,14 @@ class QuadMeshSubset(object):
         print('    ... done.')
         
         
-    def gen_polys(self, xidx, yidx):
-        lines = self.xyedge
-        
-        for i in xidx:
-            for j in yidx:
-                # The code cries out for vectorization
-                quad = lines[i,j,:], lines[i,j+1,:], lines[i+1,j+1,:], lines[i+1,j,:]
-                yield quad
+    # def gen_polys(self, xidx, yidx):
+    #     lines = self.xyedge
+    #
+    #     for i in xidx:
+    #         for j in yidx:
+    #             # The code cries out for vectorization
+    #             quad = lines[i,j,:], lines[i,j+1,:], lines[i+1,j+1,:], lines[i+1,j,:]
+    #             yield quad
         
     def query_tree(self, x):
         """ x is a 2-tuple or two element array in the same coordinates as self.xedge, self.yedge
@@ -148,8 +147,10 @@ class QuadMeshSubset(object):
         returns dist, quad_x_idx, quad_y_idx. These are indices into the pixel center arrays
         but also work as the low-index corner of the edge arrays
         """
+        # idx = self.tree.query_radius([x], r=self.n_neighbors)
         dist, idx = self.tree.query([x], k=self.n_neighbors)
         quad_x_idx, quad_y_idx = self.Xi[idx], self.Yi[idx]
+        print('idx, quad_x_idx, quad_y_idx', idx, quad_x_idx, quad_y_idx)
         return dist, quad_x_idx, quad_y_idx
         
     def quads_nearest(self, x):
@@ -159,6 +160,9 @@ class QuadMeshSubset(object):
         dists, quad_x_idx, quad_y_idx = self.query_tree(x)
         # quads = [q for q in self.gen_polys(quad_x_idx, quad_y_idx)]
         quads = self.quads[quad_x_idx, quad_y_idx, :, :]
+        print('Nearest quads')
+        for q in quads:
+            print(q)
         return quads, quad_x_idx, quad_y_idx
 
 def clip_polys_by_one_poly(polys, p, scale=True):

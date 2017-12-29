@@ -135,9 +135,9 @@ frame_interval = float(args.dt)
 dx, dy, x_bnd, y_bnd = dlonlat_at_grid_center(ctr_lat, ctr_lon, 
                             dx=dx_km, dy=dy_km,
                             x_bnd = x_bnd_km, y_bnd = y_bnd_km )
-# lat lon tuples of the corners
-corners = np.vstack([(y_bnd[0], x_bnd[0]), (y_bnd[0], x_bnd[1]), 
-                     (y_bnd[1], x_bnd[1]), (y_bnd[1], x_bnd[0])])
+# lon lat tuples of the corners
+corners = np.vstack([(x_bnd[0], y_bnd[0]), (x_bnd[0], y_bnd[1]), 
+                     (x_bnd[1], y_bnd[1]), (x_bnd[1], y_bnd[0])])
 # print(x_bnd, y_bnd)
 
 proj_name='latlong'

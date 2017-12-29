@@ -108,7 +108,7 @@ def create_pixel_lookup(lons, lats, leaf_size=40):
 
     flatlat = lats[good].flatten()
     flatlon = lons[good].flatten()
-    flat_geo = np.vstack((flatlat, flatlon)).T
+    flat_geo = np.vstack((flatlon, flatlat)).T
     # Benchmark using approach in https://jakevdp.github.io/blog/2013/04/29/benchmarking-nearest-neighbor-searches-in-python/
     lookup = KDTree(flat_geo, leaf_size=leaf_size)
     return lookup, Xgood, Ygood
