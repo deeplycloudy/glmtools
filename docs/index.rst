@@ -35,7 +35,6 @@ to install those packages from source. From some working directory (e.g.,
    conda env create -f environment.yml
    source activate glmval
    cd ../lmatools
-   git checkout flashsortrefactor
    python setup.py install
    cd ../stormdrain
    python setup.py install
