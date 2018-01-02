@@ -144,25 +144,27 @@ class QuadMeshSubset(object):
     def query_tree(self, x):
         """ x is a 2-tuple or two element array in the same coordinates as self.xedge, self.yedge
         
-        returns dist, quad_x_idx, quad_y_idx. These are indices into the pixel center arrays
+        returns dist, quad_x_idxs, quad_y_idxs. These are indices into the pixel center arrays
         but also work as the low-index corner of the edge arrays
         """
         # idx = self.tree.query_radius([x], r=self.n_neighbors)
         dist, idx = self.tree.query([x], k=self.n_neighbors)
         quad_x_idx, quad_y_idx = self.Xi[idx], self.Yi[idx]
-        print('idx, quad_x_idx, quad_y_idx', idx, quad_x_idx, quad_y_idx)
+        # print('idx, quad_x_idx, quad_y_idx', idx, quad_x_idx, quad_y_idx)
         return dist, quad_x_idx, quad_y_idx
         
     def quads_nearest(self, x):
-        """ return a list of quads from the mesh corresponding to the neighbors nearest x.
-            x is a 2-tuple or two element array in the same coordinates as self.xedge, self.yedge
+        """ Find quads from the mesh corresponding to the neighbors nearest x.
+            x is a 2-tuple or two element array in the same coordinates as 
+            self.xedge, self.yedge
+
+            returns quads, quad_x_idxs, quad_y_idxs. The indices are into the
+            pixel center arrays self.X_ctr, self.Y_ctr
+            but also work as the low-index corner of the edge arrays
         """
         dists, quad_x_idx, quad_y_idx = self.query_tree(x)
         # quads = [q for q in self.gen_polys(quad_x_idx, quad_y_idx)]
         quads = self.quads[quad_x_idx, quad_y_idx, :, :]
-        print('Nearest quads')
-        for q in quads:
-            print(q)
         return quads, quad_x_idx, quad_y_idx
 
 def clip_polys_by_one_poly(polys, p, scale=True):
@@ -174,14 +176,14 @@ def clip_polys_by_one_poly(polys, p, scale=True):
         polys = scale_to_clipper(polys)
         p = scale_to_clipper(p)
 
-    results = []
+    results=[]
     for q in polys:
         pc.AddPath(q, pyclipper.PT_SUBJECT, closed_path)
         pc.AddPath(p, pyclipper.PT_CLIP, closed_path)
         clip_polys = pc.Execute(clip_type=pyclipper.CT_INTERSECTION)
         if scale:
             clip_polys = scale_from_clipper(clip_polys)
-        results.append(clip_polys)    
+        results.append(clip_polys) 
         pc.Clear()
     return results
 
@@ -194,10 +196,23 @@ class QuadMeshPolySlicer(object):
         self.mesh = mesh
         
     def slice(self, polys):
-        """ polys is an (N, M, 2) array of N polygons with M vertices in two dimensions
+        """ polys is an (N, M, 2) array of N polygons with M vertices in two 
+        dimensions.
         
-            Returns a list of length N whose elements are (polys, areas) for each quad
-            that intersects the original N polys
+        Returns a list of length N for each of the original N polys. Each list 
+        entry specifies properties of the each sliced quad that intersects the
+        original poly. The list entries are
+        (sub_quad_polys, frac_areas, (x_idxs, y_idxs))
+        Each element of the tuple above is of length Q for the Q quads 
+        intersected by the original poly.
+        
+        Each list entry in sub_quad_polys is another list of vertices for each 
+        of the Q quads having the ares given in frac_areas.
+        
+        The indices index mesh.X_ctr, mesh.Y_ctr but also work as the
+        low-index corner of the mesh edge arrays. Therefore, the indices can 
+        be used to retrieve values from data arrays having the geometry of the
+        original mesh.
         """
         poly_arr = [np.asarray(p) for p in polys]
         areas = [np.abs(poly_area(p[:,0], p[:,1])) for p in poly_arr]
@@ -206,12 +221,26 @@ class QuadMeshPolySlicer(object):
         sub_polys = []
         for poly, area, pctr in zip(polys, areas, poly_ctr):
             quads, quad_x_idx, quad_y_idx = self.mesh.quads_nearest(pctr)
+            # each of the return values above has the same shape in the first two dimensions.
+            # print('quad shapes', quads.shape, quad_x_idx.shape, quad_y_idx.shape)
             nq = quads.shape[0] * quads.shape[1]
+
+            quad_x_idx.shape = (nq,)
+            quad_y_idx.shape = (nq,)
             quads.shape = (nq, 4, 2) # so that we can do "for q in quads"
-            clip_polys = [np.asarray(cp, dtype='f8').squeeze() for cp in clip_polys_by_one_poly(quads, poly) if len(cp) > 0]
+            
+            all_clip_polys = clip_polys_by_one_poly(quads, poly)
+            n_clip_quad = np.fromiter((len(cp) for cp in all_clip_polys), dtype='i8')
+            good_clip = (n_clip_quad > 0) # has vertices
+            clip_polys = [np.asarray(cp, dtype='f8').squeeze() 
+                          for cp, has_verts in 
+                          zip(all_clip_polys, good_clip) if has_verts]
+            clip_x_idx = quad_x_idx[good_clip]
+            clip_y_idx = quad_y_idx[good_clip]
+            # clip_polys = [np.asarray(cp, dtype='f8').squeeze() for cp in all_clip_polys if len(cp) > 0]
             frac_areas = [np.abs(poly_area(p[:,0], p[:,1])/area) for p in clip_polys]
-            sub_polys.append((clip_polys, frac_areas))
-        return sub_polys    
+            sub_polys.append((clip_polys, frac_areas, (clip_x_idx, clip_y_idx)))
+        return sub_polys
 
 
     # frac_areas = [np.abs(pyclipper.Area(cp)/area) for cp in clip_polys]
