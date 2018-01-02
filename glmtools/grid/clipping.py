@@ -213,6 +213,64 @@ class QuadMeshPolySlicer(object):
         low-index corner of the mesh edge arrays. Therefore, the indices can 
         be used to retrieve values from data arrays having the geometry of the
         original mesh.
+        
+        Example
+        -------
+        # Create the meshgrid that will chop up the polygons below
+        x = np.arange(50)
+        y = np.arange(60)+10
+        X,Y=np.meshgrid(x,y)
+
+        # Assign some values to each grid cell
+        vals = np.random.rand(X.shape[0]-1, X.shape[1]-1)
+        print(X.shape, Y.shape, vals.shape)
+
+
+        a_poly = [(.5,12), (.7,13), (1.2,15), (.9, 11)]
+        # Create a bunch of random polygons
+        N_polys = 10
+        polys = np.asarray([a_poly] * N_polys)
+        polys += np.random.rand(N_polys,4,2)
+        polys += .8*x.shape[0]*np.random.rand(N_polys)[:,None,None]
+        
+        # Set 
+        mesh = QuadMeshSubset(X, Y, n_neighbors=20)
+        slicer = QuadMeshPolySlicer(mesh)
+
+        chopped_polys = slicer.slice(polys)
+
+        def gen_polys(chopped_polys):
+            for subquads, areas, (x_idxs, y_idxs)  in chopped_polys:
+                for subquad, area, x_idx, y_idx in zip(subquads, areas, x_idxs, y_idxs):
+                    print('subquad', subquad)
+                    print('area', area)
+                    print('idx', x_idx, y_idx)
+                    yield (subquad, area, (x_idx, y_idx))
+        
+        good_polys = [p for p in gen_polys(chopped_polys)]
+        
+        from matplotlib.patches import Polygon
+        from matplotlib.collections import PatchCollection
+        fig, axs = plt.subplots(1,2, figsize=(16,10), sharex=True, sharey=True)
+        ax, ax1 = axs[0], axs[1]
+        vmin, vmax = 0, 1
+
+        # Chopped polys
+        pm = ax.pcolormesh(X, Y, vals*0, edgecolor='black', alpha=0.1, cmap='cubehelix_r', vmin=vmin, vmax=vmax)
+        ax.plot(mesh.X_ctr, mesh.Y_ctr, '.k')
+        patches = [Polygon(p, True) for p, area, ctrs in good_polys]
+        patch_coll = PatchCollection(patches, edgecolors='red', norm=pm.norm, cmap=pm.cmap, alpha=1.0)
+        patch_vals = np.asarray([vals[ctrs[0], ctrs[1]] for p, area, ctrs in good_polys])
+        print(patch_vals)
+        patch_coll.set_array(patch_vals)
+        ax.add_collection(patch_coll)
+
+        # Original polys
+        pm1 = ax1.pcolormesh(X,Y, vals, edgecolor='none', alpha=1.0, norm=pm.norm, cmap=pm.cmap)
+        patches = [Polygon(p, True) for p in polys]
+        patch_coll = PatchCollection(patches, edgecolors='red', facecolors='none', norm=pm.norm, cmap=pm.cmap, alpha=1.0)
+        patch_coll.set_array(np.fromiter((0 for p in polys), dtype=float))
+        ax1.add_collection(patch_coll)
         """
         poly_arr = [np.asarray(p) for p in polys]
         areas = [np.abs(poly_area(p[:,0], p[:,1])) for p in poly_arr]
@@ -221,7 +279,7 @@ class QuadMeshPolySlicer(object):
         sub_polys = []
         for poly, area, pctr in zip(polys, areas, poly_ctr):
             quads, quad_x_idx, quad_y_idx = self.mesh.quads_nearest(pctr)
-            # each of the return values above has the same shape in the first two dimensions.
+            # each of the return values above has the same shape in the first two dimensions. They are the quad indices that go with the original mesh.
             # print('quad shapes', quads.shape, quad_x_idx.shape, quad_y_idx.shape)
             nq = quads.shape[0] * quads.shape[1]
 
@@ -237,12 +295,7 @@ class QuadMeshPolySlicer(object):
                           zip(all_clip_polys, good_clip) if has_verts]
             clip_x_idx = quad_x_idx[good_clip]
             clip_y_idx = quad_y_idx[good_clip]
-            # clip_polys = [np.asarray(cp, dtype='f8').squeeze() for cp in all_clip_polys if len(cp) > 0]
             frac_areas = [np.abs(poly_area(p[:,0], p[:,1])/area) for p in clip_polys]
             sub_polys.append((clip_polys, frac_areas, (clip_x_idx, clip_y_idx)))
-        return sub_polys
-
-
-    # frac_areas = [np.abs(pyclipper.Area(cp)/area) for cp in clip_polys]
-        
+        return sub_polys        
         
