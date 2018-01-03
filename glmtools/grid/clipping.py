@@ -116,8 +116,13 @@ class QuadMeshSubset(object):
         # self.quads.shape = self.X_ctr.shape + (4,2)
         
         self.quads = polys_from_quadmesh(xedge, yedge)
-        # self.quad_areas = np.asarray([np.abs(poly_area(q[:,0], q[:,1])) for q in self.quads])
-        # self.quad_areas.shape = self.X_ctr.shape
+        nq = self.quads.shape[0] * self.quads.shape[1]
+        self.quads_flat = self.quads.view()
+        self.quads_flat.shape = (nq, 4, 2) # flatten the first two dimensions
+        self.quad_areas = np.abs(np.fromiter(
+            (poly_area(q[:,0], q[:,1]) for q in self.quads_flat),
+            dtype='f8'))
+        self.quad_areas.shape = self.X_ctr.shape
         
         # if min_mesh_size is None:
 #             min_mesh_size = self.quad_areas.min()
@@ -199,15 +204,20 @@ class QuadMeshPolySlicer(object):
         """ polys is an (N, M, 2) array of N polygons with M vertices in two 
         dimensions.
         
-        Returns a list of length N for each of the original N polys. Each list 
-        entry specifies properties of the each sliced quad that intersects the
-        original poly. The list entries are
+        Returns (sliced_poly_list, orig_poly_areas)
+        
+        orig_poly_areas are the areas of the polygons passed in. These are
+        calculated as a byproduct.
+        
+        sliced_poly_list is a list of length N for each of the original N polys.
+        Each list entry contains a tuple giving the properties of each sliced
+        quad that intersects the original poly. The list entries are
         (sub_quad_polys, frac_areas, (x_idxs, y_idxs))
         Each element of the tuple above is of length Q for the Q quads 
         intersected by the original poly.
         
         Each list entry in sub_quad_polys is another list of vertices for each 
-        of the Q quads having the ares given in frac_areas.
+        of the Q quads having the fractional areas given in frac_areas.
         
         The indices index mesh.X_ctr, mesh.Y_ctr but also work as the
         low-index corner of the mesh edge arrays. Therefore, the indices can 
@@ -225,20 +235,18 @@ class QuadMeshPolySlicer(object):
         vals = np.random.rand(X.shape[0]-1, X.shape[1]-1)
         print(X.shape, Y.shape, vals.shape)
 
-
-        a_poly = [(.5,12), (.7,13), (1.2,15), (.9, 11)]
-        # Create a bunch of random polygons
-        N_polys = 10
-        polys = np.asarray([a_poly] * N_polys)
-        polys += np.random.rand(N_polys,4,2)
-        polys += .8*x.shape[0]*np.random.rand(N_polys)[:,None,None]
-        
-        # Set 
+        # Set up the meshlookup and prepare to slice.
         mesh = QuadMeshSubset(X, Y, n_neighbors=20)
         slicer = QuadMeshPolySlicer(mesh)
 
-        chopped_polys = slicer.slice(polys)
+        a_poly = [(.5,12), (1.7,13), (1.9,12.5), (.9, 11)]
+        # Create a bunch of random polygons
+        N_polys = 10
+        polys = np.asarray([a_poly] * N_polys)
+        polys += .8*x.shape[0]*np.random.rand(N_polys)[:,None,None]
+        chopped_polys, orig_poly_areas = slicer.slice(polys)
 
+        # Stack together all subpolys from each of the 10 original polys
         def gen_polys(chopped_polys):
             for subquads, areas, (x_idxs, y_idxs)  in chopped_polys:
                 for subquad, area, x_idx, y_idx in zip(subquads, areas, x_idxs, y_idxs):
@@ -296,6 +304,26 @@ class QuadMeshPolySlicer(object):
             clip_x_idx = quad_x_idx[good_clip]
             clip_y_idx = quad_y_idx[good_clip]
             frac_areas = [np.abs(poly_area(p[:,0], p[:,1])/area) for p in clip_polys]
+            total_fraction = np.asarray(frac_areas).sum()*100
+            if (np.abs(total_fraction-100) > 0.1): 
+                print(not_enough_neighbors_err.format(total_fraction))
             sub_polys.append((clip_polys, frac_areas, (clip_x_idx, clip_y_idx)))
-        return sub_polys        
+        return sub_polys, areas
+
+    def quad_frac_from_poly_frac_area(self, frac_areas, total_area, 
+            quad_x_idx, quad_y_idx):
+        """ Slicing a polygon with the quadmesh returns one or more sub-quads
+        and their frac_areas as a fraction of the polygon's total_area. The
+        sub-quads came from the original mesh at quad_x_idx, quad_y_idx.
+        
+        Calculate the fraction of each original quad covered by the sub-quad.
+        """
+        sub_quad_areas = np.asarray(frac_areas)*total_area
+        quad_areas = self.mesh.quad_areas[quad_x_idx, quad_y_idx]
+        quad_frac = sub_quad_areas/quad_areas
+        return quad_frac
+
+not_enough_neighbors_err = """Polygon only {0} percent covered by quads ...
+   ... try increasing n_neighbors."""
+        
         
