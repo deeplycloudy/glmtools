@@ -81,10 +81,9 @@ def split_event_dataset_from_props(props):
 
 
 def replicate_and_weight_split_event_dataset(glm, split_event_dataset,
-                                             names=['event_energy', 'event_time_offset',
-                                                    'event_parent_flash_id', 'event_parent_group_id'],
-                                             weights={'event_energy':'split_event_area_fraction'}
-                                            ):
+        names=['event_energy', 'event_time_offset',
+               'event_parent_flash_id', 'event_parent_group_id'],
+        weights={'event_energy':'split_event_area_fraction'}):
     
     replicated_event_ids = split_event_dataset.split_event_parent_event_id
 

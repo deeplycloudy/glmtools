@@ -52,6 +52,9 @@ parser.add_argument('--ngroups', metavar='minimum groups per flash', type=int,
 parser.add_argument('--fixed_grid', metavar='filename.pickle',
                     action='store', dest='fixed_grid', 
                     help='name of file containing a pickled CCD lookup table')
+parser.add_argument('--split_events', dest='split_events', 
+                    action='store_true',
+                    help='Split GLM event polygons when gridding')
 parser.add_argument('--lma', dest='is_lma', 
                     action='store_true', 
                     help='grid LMA h5 files instead of GLM data')
@@ -181,6 +184,8 @@ grid_kwargs=dict(proj_name=proj_name,
         min_points_per_flash = min_events,
         output_writer = output_writer,
         output_filename_prefix=output_filename_prefix, spatial_scale_factor=1.0)
+if args.split_events:
+    grid_kwargs['clip_events'] = True
 if min_groups is not None:
     grid_kwargs['min_groups_per_flash'] = min_groups
 if args.is_lma:

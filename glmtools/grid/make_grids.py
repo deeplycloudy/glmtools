@@ -1,14 +1,17 @@
 """ Gridding of GLM data built on lmatools
 
 """
+import numpy as np
 from glmtools.io.mimic_lma import read_flashes
 from glmtools.io.glm import GLMDataset
 from lmatools.grid.make_grids import FlashGridder
+from glmtools.grid.clipping import QuadMeshSubset
 import sys
     
 class GLMGridder(FlashGridder):
     def process_flashes(self, glm, lat_bnd=None, lon_bnd=None, 
-                        min_points_per_flash=1, min_groups_per_flash=1):
+                        min_points_per_flash=1, min_groups_per_flash=1,
+                        clip_events=False):
         self.min_points_per_flash = min_points_per_flash
         if min_points_per_flash is None:
             # the FlashGridder class from lmatools needs an int to be able to
@@ -22,7 +25,8 @@ class GLMGridder(FlashGridder):
         read_flashes(glm, self.framer, base_date=self.t_ref, 
                      min_events=self.min_points_per_flash,
                      min_groups=self.min_groups_per_flash,
-                     lon_range=lon_bnd, lat_range=lat_bnd)
+                     lon_range=lon_bnd, lat_range=lat_bnd,
+                     clip_events=clip_events)
 
         
 def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
@@ -37,7 +41,7 @@ def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
     kwargs['do_3d'] = False
     
     process_flash_kwargs = {}
-    for prock in ('min_points_per_flash','min_groups_per_flash'):
+    for prock in ('min_points_per_flash','min_groups_per_flash', 'clip_events'):
         # interpret x_bnd and y_bnd as lon, lat
         if prock in kwargs:
             process_flash_kwargs[prock] = kwargs.pop(prock)
@@ -57,6 +61,11 @@ def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
             out_kwargs[outk] = kwargs.pop(outk)
     
     gridder = GLMGridder(start_time, end_time, **kwargs)
+    
+    if process_flash_kwargs['clip_events']:
+        xedge,yedge=np.meshgrid(gridder.xedge,gridder.yedge)
+        mesh = QuadMeshSubset(xedge, yedge, n_neighbors=16)
+        process_flash_kwargs['clip_events'] = mesh
     for filename in GLM_filenames:
         print("Processing {0}".format(filename))
         sys.stdout.flush()

@@ -3,13 +3,12 @@ import pandas as pd
 import xarray as xr
 
 from glmtools.io.glm import GLMDataset
+from glmtools.grid.split_events import split_event_data, split_event_dataset_from_props, replicate_and_weight_split_event_dataset
+from glmtools.grid.clipping import QuadMeshPolySlicer
+from glmtools.io.ccd import load_pixel_corner_lookup, quads_from_corner_lookup
 from lmatools.io.LMA_h5_file import LMAh5Collection
 from lmatools.lasso.cell_lasso_timeseries import TimeSeriesGenericFlashSubset
 from lmatools.lasso.energy_stats import TimeSeriesPolygonLassoFilter 
-
-# from glmtools.io.glm import fix_unsigned
-def fix_unsigned(arg):
-    return arg
 
 # from lmatools.io.LMA_h5_file import LMAh5Collection
 
@@ -21,7 +20,7 @@ def fix_unsigned(arg):
 #     print flashes.dtype
 
 def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
-                 min_events=None, min_groups=None):
+                 min_events=None, min_groups=None, clip_events=True):
     """ This routine is the data pipeline source, responsible for pushing out 
         events and flashes. Using a different flash data source format is a matter of
         replacing this routine to read in the necessary event and flash data.
@@ -29,6 +28,7 @@ def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
         If target is not None, target is treated as an lmatools coroutine
         data source. Otherwise, return `(events, flashes)`.
      """
+    nadir_lon = glm.dataset.number_of_events.lon_field_of_view.data
     
     if ((lon_range is not None) | (lat_range is not None) |
         (min_events is not None) | (min_groups is not None)):
@@ -37,9 +37,21 @@ def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
                         min_events=min_events, min_groups=min_groups)
     else:
         flash_data = glm.dataset
-
+    split_event_dataset=None
+    if clip_events:
+        mesh = clip_events
+        event_lons = flash_data.event_lon.data
+        event_lats = flash_data.event_lat.data
+        event_ids = flash_data.event_id.data
+        lon_lut, lat_lut, corner_lut = load_pixel_corner_lookup('/data/LCFA-production/L1b/G16_corner_lut.pickle')
+        event_polys = quads_from_corner_lookup(lon_lut[0,:], lat_lut[:,0], corner_lut, event_lons, event_lats, nadir_lon=nadir_lon)
+        slicer = QuadMeshPolySlicer(mesh)
+        chopped_polys, poly_areas = slicer.slice(event_polys)
+        split_event_polys, split_event_properties = split_event_data(chopped_polys, poly_areas, slicer, event_ids=event_ids)
+        split_event_dataset = split_event_dataset_from_props(split_event_properties)
+        split_event_dataset = replicate_and_weight_split_event_dataset(glm, split_event_dataset)
     try:
-        events, flashes = mimic_lma_dataset(flash_data, base_date)
+        events, flashes = mimic_lma_dataset(flash_data, base_date, split_events=split_event_dataset)
         if target is not None:
             if events.shape[0] >= 1:
                 target.send((events, flashes))
@@ -59,7 +71,7 @@ def sec_since_basedate(t64, basedate):
     t = np.fromiter((dt.total_seconds() for dt in t_series), dtype='float64')
     return t
 
-def _fake_lma_from_glm(flash_data, basedate):
+def _fake_lma_from_glm(flash_data, basedate, split_events=None):
     """ `flash_data` is an xarray dataset of flashes, groups, and events for
          (possibly more than one) lightning flash. `flash_data` can be generated
          with `GLMDataset.subset_flashes` or `GLMDataset.get_flashes`.
@@ -79,32 +91,34 @@ def _fake_lma_from_glm(flash_data, basedate):
                  ('init_lat', '<f4'), ('init_lon', '<f4'), 
                  ('init_alt', '<f4'),# ('init_pts', 'S256'), 
                  ('flash_id', '<i4'),  ('n_points', '<i2'),  ]
-
     
     flash_np = np.empty_like(flash_data.flash_id.data, dtype=flash_dtype)
-    event_np = np.empty_like(flash_data.event_id.data, dtype=event_dtype)
-
-    
-    # for each event get the group id
-    # for each group id get the flash id
+    if split_events:
+        event_np = np.empty_like(split_events.split_event_lon.data, dtype=event_dtype)
+    else:
+        event_np = np.empty_like(flash_data.event_id.data, dtype=event_dtype)
 
     if flash_np.shape[0] == 0:
         # no data, nothing to do
         return event_np, flash_np
         
-    event_np['flash_id'] = flash_data.event_parent_flash_id.data
-    # Doesn't work for more than one flash in the data table.
-    # event_np['flash_id'] = flash_data.event_parent_flash_id.data
+    if split_events:
+        event_np['flash_id'] = split_events.split_event_parent_flash_id.data
+        event_np['lat'] = split_events.split_event_lat 
+        event_np['lon'] = split_events.split_event_lon
+        t_event = sec_since_basedate(split_events.split_event_time_offset.data, basedate)
+        event_np['time'] = t_event
+        event_np['power'] = split_events.split_event_energy
+    else:
+        event_np['flash_id'] = flash_data.event_parent_flash_id.data
+        event_np['lat'] = flash_data.event_lat
+        event_np['lon'] = flash_data.event_lon
+        t_event = sec_since_basedate(flash_data.event_time_offset.data, basedate)
+        event_np['time'] = t_event
+        event_np['power'] = flash_data.event_energy
 
-#     ev_lats, ev_lons = fix_event_locations(flash_data.event_lat, flash_data.event_lon, is_xarray=True)
-    event_np['lat'] = fix_unsigned(flash_data.event_lat) # ev_lats
-    event_np['lon'] = fix_unsigned(flash_data.event_lon)
-    t_event = sec_since_basedate(flash_data.event_time_offset.data, basedate)
-    event_np['time'] = t_event
-    event_np['power'] = fix_unsigned(flash_data.event_energy) 
-
-    flash_np['area'] = fix_unsigned(flash_data.flash_area)
-    flash_np['total_energy'] = fix_unsigned(flash_data.flash_energy)
+    flash_np['area'] = flash_data.flash_area
+    flash_np['total_energy'] = flash_data.flash_energy
     flash_np['ctr_lon'] = flash_data.flash_lon.data
     flash_np['ctr_lat'] = flash_data.flash_lat.data
     flash_np['init_lon'] = flash_data.flash_lon.data
@@ -128,9 +142,10 @@ def _fake_lma_from_glm(flash_data, basedate):
 
 
 
-def mimic_lma_dataset(flash_data, basedate):
+def mimic_lma_dataset(flash_data, basedate, split_events=None):
     """ Mimic the LMA data structure from GLM """        
-    events, flashes = _fake_lma_from_glm(flash_data, basedate)
+    events, flashes = _fake_lma_from_glm(flash_data, basedate,
+        split_events=split_events)
     return events, flashes
 
 
