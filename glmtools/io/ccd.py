@@ -46,7 +46,82 @@ import pickle
 import tables
 import numpy as np
 from sklearn.neighbors import KDTree
+from scipy.interpolate import RegularGridInterpolator
 
+def quads_from_corner_lookup(lon, lat, corner_points, 
+                             pixel_lon, pixel_lat, nadir_lon=0.0):
+    """
+    Given corner offset data in corner_points located at ctr_lon, ctr_lat
+    return interpolated corner offsets 
+                             
+    Arguments
+    lon, lat: arrays, shape (N,M), of longitude and latitude giving the
+        locations of the corresponding offsets in corner_points
+    corner_points: array, shape (N,M,4,2)
+        Corners of the pixel quadrilateral are given in order along the
+        third dimension. Longitude and latitudes are indexes 0 and 1 in the
+        trailing dimension, respectively.
+    pixel_lon, pixel_lat: arrays, shape (P,), of longitudes and latitudes
+    nadir_lon: geostationary satellite longitude. Added to ctr_lon and
+        ctr_lat (or subtracted from pixel locations) so as to shift the
+        lookup table to the correct earth-relative position.
+                             
+    Returns
+    quads: array, shape (P,4,2) of corner locations for each pixel.
+    """
+    n_corners = corner_points.shape[-2]
+    n_coords = corner_points.shape[-1]
+
+    lon_shift = lon + nadir_lon
+    
+    pixel_loc = np.vstack((pixel_lon, pixel_lat)).T
+    grid_loc = (lon_shift.flatten(), lat.flatten())
+
+    quads = np.empty((pixel_lon.shape[0], n_corners, n_coords))
+    for ci in range(n_corners):
+        corner_interp_lon = RegularGridInterpolator(grid_loc,
+                                corner_points[:,:,ci,0], bounds_error=False)
+        corner_interp_lat = RegularGridInterpolator(grid_loc,
+                                corner_points[:,:,ci,1], bounds_error=False)
+        dlon = corner_interp_lon(pixel_loc, method='linear')
+        dlat = corner_interp_lat(pixel_loc, method='linear')
+        quads[:, ci, 0] = pixel_lon + dlon
+        quads[:, ci, 1] = pixel_lat + dlat
+    return quads
+    
+def read_official_corner_lut(filename):
+    """
+    Read a MATLAB file containing corner point lookup data.
+    
+    Returns lons, lats, corner_lut.
+    lons, lats: arrays, shape (N,M), of longitude and latitude giving the
+        locations of the corresponding offsets in corner_points
+    corner_lut: array, shape (N,M,4,2)
+        Corners of the pixel quadrilateral are given in order along the
+        third dimension. Longitude and latitudes are indexes 0 and 1 in the
+        trailing dimension, respectively.
+        
+    Latitudes, longitudes, and offsets are defined with east and north positive
+
+    """
+    from scipy.io import loadmat
+    nav = loadmat(filename)
+    lats = nav['lat_grid']
+    lons = nav['lon_grid']
+
+    corner_lut = np.zeros((129, 121, 4, 2), dtype='f8')    
+    corner_lut[:,:,0,0] = nav['nwlon'].T
+    corner_lut[:,:,1,0] = nav['swlon'].T
+    corner_lut[:,:,2,0] = nav['selon'].T
+    corner_lut[:,:,3,0] = nav['nelon'].T
+    corner_lut[:,:,0,1] = nav['nwlat'].T
+    corner_lut[:,:,1,1] = nav['swlat'].T
+    corner_lut[:,:,2,1] = nav['selat'].T
+    corner_lut[:,:,3,1] = nav['nelat'].T
+    return lons, lats, corner_lut
+
+
+    
 def read_pixel_location_mat_file(filename, lat_var='mean_lat', lon_var='mean_lon'):
     """ 
     
@@ -59,7 +134,7 @@ def read_pixel_location_mat_file(filename, lat_var='mean_lat', lon_var='mean_lon
     Returns:
     lons, lats: 2D masked arrays of longitude and latitude.
     """
-    nav = tables.open_file('GLM_base.mat')
+    nav = tables.open_file(filename)
     lats = getattr(nav.root, lat_var)[:]
     lons = getattr(nav.root, lon_var)[:]
     lats = np.ma.masked_array(lats, np.isnan(lats))
@@ -112,6 +187,31 @@ def create_pixel_lookup(lons, lats, leaf_size=40):
     # Benchmark using approach in https://jakevdp.github.io/blog/2013/04/29/benchmarking-nearest-neighbor-searches-in-python/
     lookup = KDTree(flat_geo, leaf_size=leaf_size)
     return lookup, Xgood, Ygood
+
+def save_pixel_corner_lookup(lons, lats, corners, filename=None):
+    """ 
+    Save the pixel corner offset data as produced by read_official_corner_lut.
+    If filename is not provided return a byte string  representing the pickle.
+    """
+    obj = (lons, lats, corners)
+    if filename:
+        with open(filename, 'wb') as f:
+            pickle.dump(obj, f)
+    else:
+        return pickle.dumps(obj)
+
+def load_pixel_corner_lookup(filename):
+    """
+    Returns (lons, lats, corners), the pickeled objects created by 
+    save_pixel_corner_lookup. 
+    Equivalent to the arguments returned by read_official_corner_lut.
+    """
+    with open(filename, 'rb') as f:
+        obj = pickle.load(f)
+    return obj
+
+
+
 
 def save_pixel_lookup(lookup, X, Y, lons, lats, filename=None):
     """ 

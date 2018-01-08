@@ -8,7 +8,21 @@ Later: check to see why Clipper isn't used in Agg instead of Sutherland-Hodgman.
 There is an Agg demo in the Clipper source.
 Would be good to do a demo with some radar data to see just how fast this could be
 vs. pcolormesh.
+
+
+Also, there all mesh quads could probably be processed simultaneously if we
+made the change to clipper described below. 
+
+https://stackoverflow.com/questions/46235176/clipperlib-clip-multiple-squares-with-rectangle-produces-1-result
+
+"Paul, the latest version of Clipper (still in development but solid and faster
+and unlikely to change much now before formal release) doesn't have any polygon
+merging so should do what you want ...
+sourceforge.net/p/polyclipping/code/HEAD/tree/sandbox/Clippe‌​r2 .
+Alternatively you could comment out the the JoinCommonEdges() statement in the
+ExecuteInternal method in the old Clipper."
 """
+
 import numpy as np
 from glmtools.io.ccd import create_pixel_lookup
 import pyclipper
