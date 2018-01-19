@@ -53,6 +53,10 @@ def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
         # working with ccd pixels or a projection, so no known lat lon bnds
         process_flash_kwargs['lon_bnd'] = None
         process_flash_kwargs['lat_bnd'] = None
+    
+    if 'clip_events' in process_flash_kwargs:
+        kwargs['event_grid_area_fraction_key'] = 'mesh_frac'
+        
         
     out_kwargs = {}
     for outk in ('outpath', 'output_writer', 'output_writer_3d', 'output_kwargs',
@@ -62,9 +66,9 @@ def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
     
     gridder = GLMGridder(start_time, end_time, **kwargs)
     
-    if process_flash_kwargs['clip_events']:
+    if 'clip_events' in process_flash_kwargs:
         xedge,yedge=np.meshgrid(gridder.xedge,gridder.yedge)
-        mesh = QuadMeshSubset(xedge, yedge, n_neighbors=16)
+        mesh = QuadMeshSubset(xedge, yedge, n_neighbors=16*10)
         process_flash_kwargs['clip_events'] = mesh
     for filename in GLM_filenames:
         print("Processing {0}".format(filename))

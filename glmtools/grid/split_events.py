@@ -14,10 +14,10 @@ def gen_split_events(chopped_polys, poly_areas, slicer, event_ids=None):
                         frac_areas, total_area, x_idxs, y_idxs)
 
         for subquad, frac_area, x_idx, y_idx, quad_area in zip(subquads, frac_areas, x_idxs, y_idxs, quad_fracs):
-#             print('-------')
-#             print('subquad', subquad)
-#             print('frac_area, quad_frac_area', frac_area, quad_area)
-#             print('evid, idx', evid, x_idx, y_idx)
+            # print('-------')
+            # print('subquad', subquad)
+            # print('frac_area, quad_frac_area', frac_area, quad_area)
+            # print('evid, idx', evid, x_idx, y_idx)
             yield (subquad, frac_area, quad_area, (x_idx, y_idx), evid)
 
 def split_event_data(split_polys, poly_areas, slicer, event_ids):
@@ -84,7 +84,7 @@ def replicate_and_weight_split_event_dataset(glm, split_event_dataset,
         names=['event_energy', 'event_time_offset',
                'event_parent_flash_id', 'event_parent_group_id'],
         weights={'event_energy':'split_event_area_fraction'}):
-    
+
     replicated_event_ids = split_event_dataset.split_event_parent_event_id
 
     # replicate the event radiances using the replicated event_ids. 
@@ -92,7 +92,7 @@ def replicate_and_weight_split_event_dataset(glm, split_event_dataset,
     # and should be moved back there after it's generalized 
     grouper = glm.entity_groups['event_id']
     e_idx = [grouper.groups[eid] for eid in replicated_event_ids.data]
-    e_idx_flat = np.asarray(e_idx).flatten()
+    e_idx_flat = np.asarray(e_idx, dtype=replicated_event_ids.dtype).flatten()
     
     for name in names:
         new_name = 'split_' + name
@@ -100,7 +100,7 @@ def replicate_and_weight_split_event_dataset(glm, split_event_dataset,
         if name in weights:
             weight_var = getattr(split_event_dataset, weights[name])
             # dimension names won't match, but lengths should.
-            new_var *= weight_var.data
+            new_var = new_var*weight_var.data # should ensure copy, not view
         # add variable to the dataset
         split_event_dataset[new_name] = new_var 
         

@@ -81,6 +81,7 @@ def _fake_lma_from_glm(flash_data, basedate, split_events=None):
                  ('alt', '<f4'), 
 #                  ('charge', 'i1'), ('chi2', '<f4'), ('mask', 'S4'), ('stations', 'u1'),
                  ('lat', '<f4'), ('lon', '<f4'), ('time', '<f8'),
+                 ('mesh_frac', '<f8'),
                  ('power', '<f4'), ]
     flash_dtype=[('area', '<f4'),  ('total_energy', '<f4'), 
                  #('volume', '<f4'), 
@@ -93,7 +94,7 @@ def _fake_lma_from_glm(flash_data, basedate, split_events=None):
                  ('flash_id', '<i4'),  ('n_points', '<i2'),  ]
     
     flash_np = np.empty_like(flash_data.flash_id.data, dtype=flash_dtype)
-    if split_events:
+    if split_events is not None:
         event_np = np.empty_like(split_events.split_event_lon.data, dtype=event_dtype)
     else:
         event_np = np.empty_like(flash_data.event_id.data, dtype=event_dtype)
@@ -102,13 +103,14 @@ def _fake_lma_from_glm(flash_data, basedate, split_events=None):
         # no data, nothing to do
         return event_np, flash_np
         
-    if split_events:
+    if split_events is not None:
         event_np['flash_id'] = split_events.split_event_parent_flash_id.data
         event_np['lat'] = split_events.split_event_lat 
         event_np['lon'] = split_events.split_event_lon
         t_event = sec_since_basedate(split_events.split_event_time_offset.data, basedate)
         event_np['time'] = t_event
         event_np['power'] = split_events.split_event_energy
+        event_np['mesh_frac'] = split_events.split_event_mesh_area_fraction
     else:
         event_np['flash_id'] = flash_data.event_parent_flash_id.data
         event_np['lat'] = flash_data.event_lat
