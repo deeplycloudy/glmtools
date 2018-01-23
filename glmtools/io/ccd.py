@@ -89,7 +89,9 @@ def quads_from_corner_lookup(lon, lat, corner_points,
         quads[:, ci, 1] = pixel_lat + dlat
     return quads
     
-def read_official_corner_lut(filename):
+def read_official_corner_lut(filename, y_grid='lat_grid', x_grid='lon_grid',
+        x_corners = ['nwlon', 'swlon', 'selon', 'nelon'], 
+        y_corners = ['nwlat', 'swlat', 'selat', 'nelat']):
     """
     Read a MATLAB file containing corner point lookup data.
     
@@ -106,18 +108,18 @@ def read_official_corner_lut(filename):
     """
     from scipy.io import loadmat
     nav = loadmat(filename)
-    lats = nav['lat_grid']
-    lons = nav['lon_grid']
+    lats = nav[y_grid]
+    lons = nav[x_grid]
 
     corner_lut = np.zeros((129, 121, 4, 2), dtype='f8')    
-    corner_lut[:,:,0,0] = nav['nwlon'].T
-    corner_lut[:,:,1,0] = nav['swlon'].T
-    corner_lut[:,:,2,0] = nav['selon'].T
-    corner_lut[:,:,3,0] = nav['nelon'].T
-    corner_lut[:,:,0,1] = nav['nwlat'].T
-    corner_lut[:,:,1,1] = nav['swlat'].T
-    corner_lut[:,:,2,1] = nav['selat'].T
-    corner_lut[:,:,3,1] = nav['nelat'].T
+    corner_lut[:,:,0,0] = nav[x_corners[0]].T
+    corner_lut[:,:,1,0] = nav[x_corners[1]].T
+    corner_lut[:,:,2,0] = nav[x_corners[2]].T
+    corner_lut[:,:,3,0] = nav[x_corners[3]].T
+    corner_lut[:,:,0,1] = nav[y_corners[0]].T
+    corner_lut[:,:,1,1] = nav[y_corners[1]].T
+    corner_lut[:,:,2,1] = nav[y_corners[2]].T
+    corner_lut[:,:,3,1] = nav[y_corners[3]].T
     return lons, lats, corner_lut
 
 
