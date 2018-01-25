@@ -187,6 +187,19 @@ class QuadMeshSubset(object):
         return quads, quad_x_idx, quad_y_idx
 
 def clip_polys_by_one_poly(polys, p, scale=True):
+    """ polys: a list of polygons
+        p: the polygon with which to clip polys
+        scale: convert floating point polygon coordinates to ints required
+            by the underlying clipper library.
+
+        Returns results, sub_poly_count
+        results: all polygons that were part of p but were chopped by the
+            other polys
+
+        sub_poly_count: how many sub-polygons were found for each
+            poly in polys. Can be used with np.repeat to replicate a
+            list of values associated with each original poly in polys.
+    """
     pc = pyclipper.Pyclipper()
     open_path = False
     closed_path = True
@@ -195,15 +208,42 @@ def clip_polys_by_one_poly(polys, p, scale=True):
         polys = scale_to_clipper(polys)
         p = scale_to_clipper(p)
 
+    # Each individual sub-poly is stored here.
     results=[]
+    # For any polygon p, zero, one or more than one polygon may be returned
+    # for each poly in polys (depending on overlap and the complexity of p).
+    # Keep track of how many were sub-polygons were found for each poly in polys
+    sub_polys_per_poly=[]
     for q in polys:
         pc.AddPath(q, pyclipper.PT_SUBJECT, closed_path)
         pc.AddPath(p, pyclipper.PT_CLIP, closed_path)
         clip_polys = pc.Execute(clip_type=pyclipper.CT_INTERSECTION)
         if scale:
             clip_polys = scale_from_clipper(clip_polys)
-        results.append(clip_polys) 
+        sub_polys_per_poly.append(len(clip_polys))
+        results.extend([cp for cp in clip_polys])
         pc.Clear()
+    return results, sub_polys_per_poly
+
+def join_polys(polys, scale=True):
+    """ Given a list of polygons, merge them (union) and return a list
+        of merged polygons
+    """
+    pc = pyclipper.Pyclipper()
+    open_path = False
+    closed_path = True
+
+    if scale:
+        polys = scale_to_clipper(polys)
+
+    results=[]
+    pc.AddPaths(polys, pyclipper.PT_SUBJECT, closed_path)
+    clip_polys = pc.Execute(pyclipper.CT_UNION, pyclipper.PFT_NONZERO, 
+        pyclipper.PFT_NONZERO)
+    if scale:
+        clip_polys = scale_from_clipper(clip_polys)
+    results.extend([cp for cp in clip_polys]) 
+    pc.Clear()
     return results
 
 class QuadMeshPolySlicer(object):
@@ -215,8 +255,8 @@ class QuadMeshPolySlicer(object):
         self.mesh = mesh
         
     def slice(self, polys):
-        """ polys is an (N, M, 2) array of N polygons with M vertices in two 
-        dimensions.
+        """ polys is an (N, M, 2) array or N-element list of (M,2) arrays
+        of N polygons with M vertices in two dimensions.
         
         Returns (sliced_poly_list, orig_poly_areas)
         
@@ -309,14 +349,11 @@ class QuadMeshPolySlicer(object):
             quad_y_idx.shape = (nq,)
             quads.shape = (nq, 4, 2) # so that we can do "for q in quads"
             
-            all_clip_polys = clip_polys_by_one_poly(quads, poly)
-            n_clip_quad = np.fromiter((len(cp) for cp in all_clip_polys), dtype='i8')
-            good_clip = (n_clip_quad > 0) # has vertices
+            all_clip_polys, count_per_quad = clip_polys_by_one_poly(quads, poly)
+            clip_x_idx = np.repeat(quad_x_idx, count_per_quad)
+            clip_y_idx = np.repeat(quad_y_idx, count_per_quad)
             clip_polys = [np.asarray(cp, dtype='f8').squeeze() 
-                          for cp, has_verts in 
-                          zip(all_clip_polys, good_clip) if has_verts]
-            clip_x_idx = quad_x_idx[good_clip]
-            clip_y_idx = quad_y_idx[good_clip]
+                          for cp in all_clip_polys]
             frac_areas = [np.abs(poly_area(p[:,0], p[:,1])/area) for p in clip_polys]
             total_fraction = np.asarray(frac_areas).sum()*100
             if (np.abs(total_fraction-100) > 0.1): 
