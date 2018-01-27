@@ -108,7 +108,8 @@ class QuadMeshSubset(object):
         # By example, for a 1 km grid and an 8 km poly, the max height would be 8, pad with one, to get 81 grid cells. For a 2 km grid and an 8 km poly, 4+1 grid cells or 25 grid cells. For an 8 km grid, 4 grid cells.
     
         self.n_neighbors = n_neighbors
-    
+        self.xedge = xedge
+        self.yedge = yedge
         if X_ctr is None:
             X_ctr = (xedge[:-1, :-1] + xedge[1:, 1:] +
                      xedge[1:, :-1] + xedge[:-1, 1:])/4.0
@@ -183,9 +184,30 @@ class QuadMeshSubset(object):
         """
         dists, quad_x_idx, quad_y_idx = self.query_tree(x)
         # quads = [q for q in self.gen_polys(quad_x_idx, quad_y_idx)]
+        # Squeeze a leading dimension of 1 on x/y_idx and therefore on quads
+        quads = self.quads[quad_x_idx, quad_y_idx, :, :].squeeze()
+        return quads, quad_x_idx.squeeze(), quad_y_idx.squeeze()
+        
+    def quads_in_bbox(self, bbox):
+        """ bbox is xmin, xmax, ymin, ymax """
+        xlim = bbox[:2]
+        ylim = bbox[2:]
+        # These will miss quads that straddle the edge of the bbox if their
+        # centers are outside of the bbox
+        # goodx = (self.X_ctr >= xlim[0]) & (self.X_ctr <= xlim[1])
+        # goody = (self.Y_ctr >= ylim[0]) & (self.Y_ctr <= ylim[1])
+        goodx = np.zeros(self.quads.shape[0:2], dtype=bool)
+        goody = np.zeros(self.quads.shape[0:2], dtype=bool)
+        for qi in range(4):
+            # loop over the quad corners, keeping quads with at least one corner in bounds
+            goodx |= ((self.quads[:,:,qi,0] >= xlim[0]) &
+                      (self.quads[:,:,qi,0] <= xlim[1])) 
+            goody |= ((self.quads[:,:,qi,1] >= ylim[0]) &
+                      (self.quads[:,:,qi,1] <= ylim[1]))
+        quad_x_idx, quad_y_idx = np.where((goodx & goody))
         quads = self.quads[quad_x_idx, quad_y_idx, :, :]
         return quads, quad_x_idx, quad_y_idx
-
+        
 def clip_polys_by_one_poly(polys, p, scale=True):
     """ polys: a list of polygons
         p: the polygon with which to clip polys
@@ -254,9 +276,14 @@ class QuadMeshPolySlicer(object):
         """
         self.mesh = mesh
         
-    def slice(self, polys):
+    def slice(self, polys, bbox=None):
         """ polys is an (N, M, 2) array or N-element list of (M,2) arrays
         of N polygons with M vertices in two dimensions.
+        
+        if bbox = (xmin, xmax, ymin, ymax) is present, slice with the mesh
+        subset within that bbox. If bbox is true, use the dimensions of each
+        poly to figure out the bbox. Otherwise, n nearest neighbors as
+        configured for the QuadMeshSubset object are returned.
         
         Returns (sliced_poly_list, orig_poly_areas)
         
@@ -334,16 +361,28 @@ class QuadMeshPolySlicer(object):
         patch_coll.set_array(np.fromiter((0 for p in polys), dtype=float))
         ax1.add_collection(patch_coll)
         """
+        if bbox == True:
+            recalc_bbox = True
+            # else use the bbox that is specified exactly
+        
         poly_arr = [np.asarray(p) for p in polys]
         areas = [np.abs(poly_area(p[:,0], p[:,1])) for p in poly_arr]
         poly_ctr = [p.mean(axis=0) for p in poly_arr]
     
         sub_polys = []
-        for poly, area, pctr in zip(polys, areas, poly_ctr):
-            quads, quad_x_idx, quad_y_idx = self.mesh.quads_nearest(pctr)
+        for poly, area, pctr in zip(poly_arr, areas, poly_ctr):
+            if bbox is not None:
+                if recalc_bbox:
+                    mins = np.min(poly, axis=0)
+                    maxs = np.max(poly, axis=0)
+                    bbox = mins[0], maxs[0], mins[1], maxs[1]
+                    # print('using bbox', bbox)
+                quads, quad_x_idx, quad_y_idx = self.mesh.quads_in_bbox(bbox)
+            else:
+                quads, quad_x_idx, quad_y_idx = self.mesh.quads_nearest(pctr)
             # each of the return values above has the same shape in the first two dimensions. They are the quad indices that go with the original mesh.
             # print('quad shapes', quads.shape, quad_x_idx.shape, quad_y_idx.shape)
-            nq = quads.shape[0] * quads.shape[1]
+            nq = quads.shape[0] #* quads.shape[1]
 
             quad_x_idx.shape = (nq,)
             quad_y_idx.shape = (nq,)

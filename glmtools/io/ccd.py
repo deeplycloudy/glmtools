@@ -46,10 +46,11 @@ import pickle
 import tables
 import numpy as np
 from sklearn.neighbors import KDTree
-from scipy.interpolate import RegularGridInterpolator
+from scipy.interpolate import LinearNDInterpolator
 
 def quads_from_corner_lookup(lon, lat, corner_points, 
-                             pixel_lon, pixel_lat, nadir_lon=0.0):
+                             pixel_lon, pixel_lat, nadir_lon=0.0,
+                             inflate=1.0):
     """
     Given corner offset data in corner_points located at ctr_lon, ctr_lat
     return interpolated corner offsets 
@@ -62,8 +63,8 @@ def quads_from_corner_lookup(lon, lat, corner_points,
         third dimension. Longitude and latitudes are indexes 0 and 1 in the
         trailing dimension, respectively.
     pixel_lon, pixel_lat: arrays, shape (P,), of longitudes and latitudes
-    nadir_lon: geostationary satellite longitude. Added to ctr_lon and
-        ctr_lat (or subtracted from pixel locations) so as to shift the
+    nadir_lon: geostationary satellite longitude. Added to lon and
+        lat (or subtracted from pixel locations) so as to shift the
         lookup table to the correct earth-relative position.
                              
     Returns
@@ -79,14 +80,16 @@ def quads_from_corner_lookup(lon, lat, corner_points,
 
     quads = np.empty((pixel_lon.shape[0], n_corners, n_coords))
     for ci in range(n_corners):
-        corner_interp_lon = RegularGridInterpolator(grid_loc,
-                                corner_points[:,:,ci,0], bounds_error=False)
-        corner_interp_lat = RegularGridInterpolator(grid_loc,
-                                corner_points[:,:,ci,1], bounds_error=False)
-        dlon = corner_interp_lon(pixel_loc, method='linear')
-        dlat = corner_interp_lat(pixel_loc, method='linear')
-        quads[:, ci, 0] = pixel_lon + dlon
-        quads[:, ci, 1] = pixel_lat + dlat
+        corner_interp_lon = LinearNDInterpolator(grid_loc,
+                                corner_points[:,:,ci,0].flatten())
+                                #, bounds_error=True)
+        corner_interp_lat = LinearNDInterpolator(grid_loc,
+                                corner_points[:,:,ci,1].flatten()) 
+                                #, bounds_error=True)
+        dlon = corner_interp_lon(pixel_loc)
+        dlat = corner_interp_lat(pixel_loc)
+        quads[:, ci, 0] = pixel_lon + dlon*inflate
+        quads[:, ci, 1] = pixel_lat + dlat*inflate
     return quads
     
 def read_official_corner_lut(filename, y_grid='lat_grid', x_grid='lon_grid',
@@ -111,15 +114,15 @@ def read_official_corner_lut(filename, y_grid='lat_grid', x_grid='lon_grid',
     lats = nav[y_grid]
     lons = nav[x_grid]
 
-    corner_lut = np.zeros((129, 121, 4, 2), dtype='f8')    
-    corner_lut[:,:,0,0] = nav[x_corners[0]].T
-    corner_lut[:,:,1,0] = nav[x_corners[1]].T
-    corner_lut[:,:,2,0] = nav[x_corners[2]].T
-    corner_lut[:,:,3,0] = nav[x_corners[3]].T
-    corner_lut[:,:,0,1] = nav[y_corners[0]].T
-    corner_lut[:,:,1,1] = nav[y_corners[1]].T
-    corner_lut[:,:,2,1] = nav[y_corners[2]].T
-    corner_lut[:,:,3,1] = nav[y_corners[3]].T
+    corner_lut = np.zeros((lats.shape[0], lats.shape[1], 4, 2), dtype='f8')    
+    corner_lut[:,:,0,0] = nav[x_corners[0]]
+    corner_lut[:,:,1,0] = nav[x_corners[1]]
+    corner_lut[:,:,2,0] = nav[x_corners[2]]
+    corner_lut[:,:,3,0] = nav[x_corners[3]]
+    corner_lut[:,:,0,1] = nav[y_corners[0]]
+    corner_lut[:,:,1,1] = nav[y_corners[1]]
+    corner_lut[:,:,2,1] = nav[y_corners[2]]
+    corner_lut[:,:,3,1] = nav[y_corners[3]]
     return lons, lats, corner_lut
 
 

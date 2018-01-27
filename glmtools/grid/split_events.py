@@ -7,7 +7,9 @@ def gen_split_events(chopped_polys, poly_areas, slicer, event_ids=None):
         It is the data structure created by QuadMeshPolySlicer.slice
     event_ids are N corresponding event_ids
     """
-    if event_ids is None: event_ids = range(len(chopped_polys))
+    if event_ids is None: 
+        print("Faking event ids")
+        event_ids = range(len(chopped_polys))
     
     for (subquads, frac_areas, (x_idxs, y_idxs)), total_area, evid in zip(chopped_polys, poly_areas, event_ids):
         quad_fracs = slicer.quad_frac_from_poly_frac_area(
@@ -22,8 +24,10 @@ def gen_split_events(chopped_polys, poly_areas, slicer, event_ids=None):
 
 def split_event_data(split_polys, poly_areas, slicer, event_ids):
     """
-    split_polys is a list of N polygons whose elements contain the sub-polys of each polygon.
-        It is the data structure created by QuadMeshPolySlicer.slice
+    split_polys is a list of N original polygons whose elements contain the
+    sub-polys of each polygon. It is the data structure created by 
+    QuadMeshPolySlicer.slice
+
     event_ids are N corresponding event_ids
     """
 
@@ -67,7 +71,7 @@ def split_event_data(split_polys, poly_areas, slicer, event_ids):
 def split_event_dataset_from_props(props):
     """ props is the numpy array with named dtype returned by split_event_dataset """
     
-    dims = ('number_of_split_events',)
+    dims = ('number_of_split_event_children',)
     d ={
         'split_event_lon': {'dims':dims, 'data':props['poly_ctr'][:,0]},
         'split_event_lat': {'dims':dims, 'data':props['poly_ctr'][:,1]},
@@ -79,29 +83,58 @@ def split_event_dataset_from_props(props):
     }
     return xr.Dataset.from_dict(d)
 
+def split_flash_dataset_from_props(props):
+    """ props is the numpy array with named dtype returned by split_event_dataset """
+    
+    dims = ('number_of_split_flash_children',)
+    d ={
+        'split_flash_lon': {'dims':dims, 'data':props['poly_ctr'][:,0]},
+        'split_flash_lat': {'dims':dims, 'data':props['poly_ctr'][:,1]},
+        'split_flash_mesh_area_fraction': {'dims':dims, 'data':props['mesh_frac_area']},
+        'split_flash_area_fraction': {'dims':dims, 'data':props['event_frac_area']},
+        'split_flash_mesh_x_idx': {'dims':dims, 'data':props['mesh_idx'][:,0]},
+        'split_flash_mesh_y_idx': {'dims':dims, 'data':props['mesh_idx'][:,1]},
+        'split_flash_parent_flash_id': {'dims':dims, 'data':props['event_id']},
+    }
+    return xr.Dataset.from_dict(d)
 
-def replicate_and_weight_split_event_dataset(glm, split_event_dataset,
+
+def replicate_and_weight_split_child_dataset(glm, split_child_dataset,
+        parent_id='event_id', split_child_parent_id='split_event_parent_event_id',
         names=['event_energy', 'event_time_offset',
                'event_parent_flash_id', 'event_parent_group_id'],
         weights={'event_energy':'split_event_area_fraction'}):
+    """
+    Create a child level of the hierarchy that corresponds properties of its
+    parent that have been geometrically split. Apply fractional weights.
+        
+    The default args/kwargs show how to split the GLM event dataset into a set
+    of sub-event children. This function can also be used to split flashes
+    given a set of flash-level polygons. Those polygons are assumed to have no
+    overlap - i.e., the constituent events from that flash have been unioned
+    and then split. In this way, we divide up flash-level properties without
+    regard to the values of the lower-level children.
+    """
 
-    replicated_event_ids = split_event_dataset.split_event_parent_event_id
+    split_dims = getattr(split_child_dataset, split_child_parent_id).dims
+    replicated_event_ids = getattr(split_child_dataset, split_child_parent_id)
 
-    # replicate the event radiances using the replicated event_ids. 
+    # replicate the parent properties (e.g.,radiant energy) using the
+    # replicated event_ids.
     # This chunk is stolen from the traversal.replicate_parent_id class
-    # and should be moved back there after it's generalized 
-    grouper = glm.entity_groups['event_id']
+    # and should be moved back there after it's generalized.
+    grouper = glm.entity_groups[parent_id]
     e_idx = [grouper.groups[eid] for eid in replicated_event_ids.data]
     e_idx_flat = np.asarray(e_idx, dtype=replicated_event_ids.dtype).flatten()
     
     for name in names:
         new_name = 'split_' + name
-        new_var = getattr(glm.dataset, name)[e_idx_flat]
+        new_var = getattr(glm.dataset, name)[e_idx_flat].data
         if name in weights:
-            weight_var = getattr(split_event_dataset, weights[name])
+            weight_var = getattr(split_child_dataset, weights[name])
             # dimension names won't match, but lengths should.
             new_var = new_var*weight_var.data # should ensure copy, not view
         # add variable to the dataset
-        split_event_dataset[new_name] = new_var 
+        split_child_dataset[new_name] = (split_dims, new_var) #{'dims':split_dims, 'data':new_var}
         
-    return split_event_dataset
+    return split_child_dataset
