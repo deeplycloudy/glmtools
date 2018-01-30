@@ -15,14 +15,19 @@ decoding of the ``_Unsigned`` integer data that is used throughout the GLM
 NetCDF files. ``matplotlib`` is used for plotting. Gridding and flash statistics
 are built on top of ``lmatools``.
 
+If provided with CCD pixel shape information, ``glmtools`` can regrid the GLM
+event detections onto an arbitrary target grid using fractional pixel coverage. 
+Doing so requires the ``pyclipper`` wrapper for the freeware `Clipper 
+<http://www.angusj.com/delphi/clipper.php>`_ c++ library.
+
 Step by step instructions
 ------------------------- 
 
 The instructions below assume the Anaconda Python distribution (`miniconda` is
 fine), and the availability of the ``conda`` package manager.
 
-Until development on ``xarray`` and ``lmatools`` stabilizes, it is recommended
-to install those packages from source. From some working directory (e.g.,
+Until development on ``lmatools`` stabilizes, it is recommended
+to install that package from source. From some working directory (e.g.,
 ``~/sources``):
 
 .. code-block:: bash
@@ -30,19 +35,16 @@ to install those packages from source. From some working directory (e.g.,
    git clone https://github.com/deeplycloudy/lmatools.git
    git clone https://github.com/deeplycloudy/stormdrain.git
    git clone https://github.com/deeplycloudy/glmtools.git
-   git clone https://github.com/pydata/xarray.git
    cd glmtools
    conda env create -f environment.yml
    source activate glmval
+   pip install pyclipper
    cd ../lmatools
    python setup.py install
    cd ../stormdrain
    python setup.py install
-   cd ../xarray
-   pip install -e ./
    cd ../glmtools
    pip install -e ./
-   
 
 Recommended Analyses
 ====================
