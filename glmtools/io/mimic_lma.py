@@ -6,9 +6,11 @@ from glmtools.io.glm import GLMDataset
 from glmtools.grid.split_events import split_event_data, split_event_dataset_from_props, split_flash_dataset_from_props, replicate_and_weight_split_child_dataset
 from glmtools.grid.clipping import QuadMeshPolySlicer, join_polys
 from glmtools.io.ccd import load_pixel_corner_lookup, quads_from_corner_lookup
+from glmtools.io.lightning_ellipse import ltg_ellps_lon_lat_to_fixed_grid
 from lmatools.io.LMA_h5_file import LMAh5Collection
 from lmatools.lasso.cell_lasso_timeseries import TimeSeriesGenericFlashSubset
 from lmatools.lasso.energy_stats import TimeSeriesPolygonLassoFilter 
+from lmatools.grid.fixed import get_GOESR_coordsys
 
 # from lmatools.io.LMA_h5_file import LMAh5Collection
 
@@ -20,16 +22,18 @@ from lmatools.lasso.energy_stats import TimeSeriesPolygonLassoFilter
 #     print flashes.dtype
 
 def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
-                 min_events=None, min_groups=None, clip_events=True):
+                 min_events=None, min_groups=None, clip_events=True,
+                 fixed_grid=False, nadir_lon=None):
     """ This routine is the data pipeline source, responsible for pushing out 
-        events and flashes. Using a different flash data source format is a matter of
-        replacing this routine to read in the necessary event and flash data.
+        events and flashes. Using a different flash data source format is a 
+        matter of replacing this routine to read in the necessary event 
+        and flash data.
         
         If target is not None, target is treated as an lmatools coroutine
         data source. Otherwise, return `(events, flashes)`.
      """
-    nadir_lon = glm.dataset.nominal_satellite_subpoint_lon.data
-    
+    geofixcs, grs80lla = get_GOESR_coordsys(sat_lon_nadir=nadir_lon)
+            
     if ((lon_range is not None) | (lat_range is not None) |
         (min_events is not None) | (min_groups is not None)):
         # only subset if we have to
@@ -38,20 +42,13 @@ def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
     else:
         flash_data = glm.dataset
     split_event_dataset=None
+    split_flash_dataset=None
     if clip_events:
         mesh = clip_events
         event_lons = flash_data.event_lon.data
         event_lats = flash_data.event_lat.data
         event_ids = flash_data.event_id.data
         event_parent_flash_ids = flash_data.event_parent_flash_id.data
-        lon_lut, lat_lut, corner_lut = load_pixel_corner_lookup('/data/LCFA-production/L1b/G16_corner_lut_lonlat.pickle')
-        event_polys = quads_from_corner_lookup(lon_lut, lat_lut, corner_lut, event_lons, event_lats, nadir_lon=nadir_lon)
-
-        slicer = QuadMeshPolySlicer(mesh)
-        chopped_polys, poly_areas = slicer.slice(event_polys)
-        split_event_polys, split_event_properties = split_event_data(chopped_polys, poly_areas, slicer, event_ids=event_ids)
-        split_event_dataset = split_event_dataset_from_props(split_event_properties)
-        split_event_dataset = replicate_and_weight_split_child_dataset(glm, split_event_dataset)
         
         # On a per-flash basis, and eventually on a per-group basis,
         # we want to union all events for each parent. This gives a master
@@ -71,9 +68,34 @@ def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
         # each mesh cell is used. Therefore, we inflate the event_polys before
         # unioning by a little bit to avoid the above problem.
         
-        event_polys_inflated = quads_from_corner_lookup(lon_lut, lat_lut, 
-            corner_lut, event_lons, event_lats, nadir_lon=nadir_lon,
-            inflate=1.02)
+        if fixed_grid:
+            x_lut, y_lut, corner_lut = load_pixel_corner_lookup(
+                '/data/LCFA-production/L1b/G16_corner_lut_fixedgrid.pickle')
+            # Convert from microradians to radians
+            x_lut = x_lut * 1.0e-6
+            y_lut = y_lut * 1.0e-6
+            corner_lut = corner_lut*1e-6
+            event_x, event_y = ltg_ellps_lon_lat_to_fixed_grid(event_lons, 
+                event_lats, nadir_lon)
+            event_polys = quads_from_corner_lookup(x_lut, y_lut, corner_lut,
+                event_x, event_y)
+            event_polys_inflated = quads_from_corner_lookup(x_lut, y_lut, 
+                corner_lut, event_x, event_y, inflate=1.02)
+        else:
+            lon_lut, lat_lut, corner_lut = load_pixel_corner_lookup(
+                '/data/LCFA-production/L1b/G16_corner_lut_lonlat.pickle')
+            event_polys = quads_from_corner_lookup(lon_lut, lat_lut, 
+                corner_lut, event_lons, event_lats, nadir_lon=nadir_lon)
+            event_polys_inflated = quads_from_corner_lookup(lon_lut, lat_lut, 
+                corner_lut, event_lons, event_lats, nadir_lon=nadir_lon,
+                inflate=1.02)
+
+        slicer = QuadMeshPolySlicer(mesh)
+        chopped_polys, poly_areas = slicer.slice(event_polys)
+        split_event_polys, split_event_properties = split_event_data(chopped_polys, poly_areas, slicer, event_ids=event_ids)
+        split_event_dataset = split_event_dataset_from_props(split_event_properties)
+        split_event_dataset = replicate_and_weight_split_child_dataset(glm, split_event_dataset)
+                
         unique_fl_ids = np.unique(event_parent_flash_ids)
         poly_index = dict(((k,[]) for k in unique_fl_ids))
         for split_poly, flash_id in zip(event_polys_inflated, event_parent_flash_ids):
@@ -90,7 +112,30 @@ def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
         chopped_union_polys, poly_union_areas = slicer.slice(union_polys, bbox=True)    
         split_flash_polys, split_flash_properties = split_event_data(chopped_union_polys, 
             poly_union_areas, slicer, event_ids=union_flash_ids)
-        split_flash_dataset = split_flash_dataset_from_props(split_flash_properties)
+        if fixed_grid:
+            # Use variable names that indicate the fixed grid polygon centroid
+            # coordinates are x,y. Then, convert those coordinates to lon, lat
+            # referenced to the earth (not lightning) ellipsoid, because
+            # lmatools expects lon, lat as input to its gridding routines.
+            # These will be wastefully re-transformed back into fixed grid 
+            # coordinates when gridded onto the fixed grid, but this approch
+            # also allows gridding to arbitrary other target grids.
+            split_flash_dataset = split_flash_dataset_from_props(
+                split_flash_properties, centroid_names=('split_flash_x',
+                                                        'split_flash_y'))
+            fixed_x_ctr = split_flash_dataset['split_flash_x'].data
+            fixed_y_ctr = split_flash_dataset['split_flash_y'].data
+            fixed_z_ctr = np.zeros_like(fixed_x_ctr)
+            split_flash_lon, split_flash_lat, split_flash_alt = grs80lla.fromECEF(
+                *geofixcs.toECEF(fixed_x_ctr, fixed_y_ctr, fixed_z_ctr))
+            split_dims = getattr(split_flash_dataset, 
+                'split_flash_parent_flash_id').dims
+            split_flash_dataset['split_flash_lon'] = (split_dims, split_flash_lon)
+            split_flash_dataset['split_flash_lat'] = (split_dims, split_flash_lat)                                                        
+        else:
+            split_flash_dataset = split_flash_dataset_from_props(
+                split_flash_properties)              
+            
         split_flash_dataset = replicate_and_weight_split_child_dataset(glm, split_flash_dataset,        
             parent_id='flash_id', split_child_parent_id='split_flash_parent_flash_id',
             names=['flash_time_offset_of_first_event', 'flash_time_offset_of_last_event',

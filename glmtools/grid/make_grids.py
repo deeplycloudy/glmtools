@@ -4,14 +4,16 @@
 import numpy as np
 from glmtools.io.mimic_lma import read_flashes
 from glmtools.io.glm import GLMDataset
-from lmatools.grid.make_grids import FlashGridder
 from glmtools.grid.clipping import QuadMeshSubset
+from lmatools.grid.make_grids import FlashGridder
+from lmatools.grid.fixed import get_GOESR_coordsys
 import sys
     
 class GLMGridder(FlashGridder):
     def process_flashes(self, glm, lat_bnd=None, lon_bnd=None, 
                         min_points_per_flash=1, min_groups_per_flash=1,
-                        clip_events=False):
+                        clip_events=False, fixed_grid=False,
+                        nadir_lon=None):
         self.min_points_per_flash = min_points_per_flash
         if min_points_per_flash is None:
             # the FlashGridder class from lmatools needs an int to be able to
@@ -26,7 +28,8 @@ class GLMGridder(FlashGridder):
                      min_events=self.min_points_per_flash,
                      min_groups=self.min_groups_per_flash,
                      lon_range=lon_bnd, lat_range=lat_bnd,
-                     clip_events=clip_events)
+                     clip_events=clip_events, fixed_grid=fixed_grid,
+                     nadir_lon=nadir_lon)
 
         
 def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
@@ -41,7 +44,8 @@ def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
     kwargs['do_3d'] = False
     
     process_flash_kwargs = {}
-    for prock in ('min_points_per_flash','min_groups_per_flash', 'clip_events'):
+    for prock in ('min_points_per_flash','min_groups_per_flash',
+                  'clip_events', 'fixed_grid', 'nadir_lon'):
         # interpret x_bnd and y_bnd as lon, lat
         if prock in kwargs:
             process_flash_kwargs[prock] = kwargs.pop(prock)
@@ -49,6 +53,13 @@ def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
     if kwargs['proj_name'] == 'latlong':
         process_flash_kwargs['lon_bnd'] = kwargs['x_bnd']
         process_flash_kwargs['lat_bnd'] = kwargs['y_bnd']
+    elif 'fixed_grid' in process_flash_kwargs:
+        nadir_lon = process_flash_kwargs['nadir_lon']
+        geofixcs, grs80lla = get_GOESR_coordsys(sat_lon_nadir=nadir_lon)
+        lon_bnd, lat_bnd, alt_bnd = grs80lla.fromECEF( *geofixcs.toECEF(
+            kwargs['x_bnd'], kwargs['y_bnd'], kwargs['x_bnd']*0.0))
+        process_flash_kwargs['lon_bnd'] = lon_bnd
+        process_flash_kwargs['lat_bnd'] = lat_bnd
     else:
         # working with ccd pixels or a projection, so no known lat lon bnds
         process_flash_kwargs['lon_bnd'] = None
@@ -56,8 +67,8 @@ def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
     
     if 'clip_events' in process_flash_kwargs:
         kwargs['event_grid_area_fraction_key'] = 'mesh_frac'
-        
-        
+            
+
     out_kwargs = {}
     for outk in ('outpath', 'output_writer', 'output_writer_3d', 'output_kwargs',
                  'output_filename_prefix', 'spatial_scale_factor'):
@@ -65,7 +76,7 @@ def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
             out_kwargs[outk] = kwargs.pop(outk)
     
     gridder = GLMGridder(start_time, end_time, **kwargs)
-    
+
     if 'clip_events' in process_flash_kwargs:
         xedge,yedge=np.meshgrid(gridder.xedge,gridder.yedge)
         mesh = QuadMeshSubset(xedge, yedge, n_neighbors=16*10)
@@ -75,7 +86,7 @@ def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
         sys.stdout.flush()
         glm = GLMDataset(filename)
         gridder.process_flashes(glm, **process_flash_kwargs)
-        
+
     output = gridder.write_grids(**out_kwargs)
     return output    
 

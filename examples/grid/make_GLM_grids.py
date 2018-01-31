@@ -49,9 +49,18 @@ parser.add_argument('--nevents', metavar='minimum events per flash', type=int,
 parser.add_argument('--ngroups', metavar='minimum groups per flash', type=int,
                     dest='min_groups', action='store', default=1,
                     help='minimum number of groups per flash')
-parser.add_argument('--fixed_grid', metavar='filename.pickle',
-                    action='store', dest='fixed_grid', 
-                    help='name of file containing a pickled CCD lookup table')
+parser.add_argument('--fixed_grid',
+                    action='store_true', dest='fixed_grid',
+                    help='grid to the geostationary fixed grid')
+parser.add_argument('--goes_position', default='none',
+                    action='store', dest='goes_position',
+                    help='one of [east|west|test]. also requires goes_sector.')
+parser.add_argument('--goes_sector', default='none',
+                    action='store', dest='goes_sector',
+                    help='one of [full|conus|meso]. also requires goes_position. If sector is meso, ctr_lon and ctr_lat are interpreted as the ctr_x and ctr_y of the fixed grid')
+parser.add_argument('--corner_points', metavar='filename.pickle',
+                    action='store', dest='corner_points', 
+                    help='name of file containing a pickled corner point lookup table')
 parser.add_argument('--split_events', dest='split_events', 
                     action='store_true',
                     help='Split GLM event polygons when gridding')
@@ -71,12 +80,14 @@ import numpy as np
 import subprocess, glob
 from datetime import datetime
 import os
+from functools import partial
 
-from lmatools.grid.make_grids import write_cf_netcdf_latlon, write_cf_netcdf_noproj
+from lmatools.grid.make_grids import write_cf_netcdf_latlon, write_cf_netcdf_noproj, write_cf_netcdf_fixedgrid
 from lmatools.grid.make_grids import dlonlat_at_grid_center, grid_h5flashfiles
 from glmtools.grid.make_grids import grid_GLM_flashes
 from glmtools.io.glm import parse_glm_filename
 from lmatools.io.LMA_h5_file import parse_lma_h5_filename
+from lmatools.grid.fixed import get_GOESR_grid, get_GOESR_coordsys
 
 # When passed None for the minimum event or group counts, the gridder will skip 
 # the check, saving a bit of time.
@@ -143,10 +154,14 @@ corners = np.vstack([(x_bnd[0], y_bnd[0]), (x_bnd[0], y_bnd[1]),
                      (x_bnd[1], y_bnd[1]), (x_bnd[1], y_bnd[0])])
 # print(x_bnd, y_bnd)
 
+# Default
 proj_name='latlong'
 output_writer = write_cf_netcdf_latlon
 
-if args.fixed_grid is not None:
+# Old support for a direct lon/lat to fixed grid lookup table. Unused
+# at the moment.
+pixel_grid = None
+if pixel_grid is not None:
     from glmtools.io.ccd import load_pixel_lookup
     from lmatools.coordinateSystems import PixelGrid
     ccd_lookup_data = load_pixel_lookup(args.fixed_grid)
@@ -168,8 +183,43 @@ if args.fixed_grid is not None:
     proj_name='pixel_grid'
     # ccdsub_lons=lons[ccd_Xmin:ccd_Xmax+1, ccd_Ymin:ccd_Ymax+1]
     # ccdsub_lats=lats[ccd_Xmin:ccd_Xmax+1, ccd_Ymin:ccd_Ymax+1]
-print(x_bnd, y_bnd)
+# print(x_bnd, y_bnd)
 
+if args.fixed_grid:
+    proj_name = 'geos'
+    if (args.goes_position != 'none') & (args.goes_sector != 'none'):
+        goes_resln_options = np.asarray([0.5, 1.0, 2.0, 4.0, 10.0])
+        resln_idx = np.argmin(np.abs(goes_resln_options - args.dx))
+        closest_resln = goes_resln_options[resln_idx]
+        resln = '{0:4.1f}km'.format(closest_resln).replace(' ', '')
+        view = get_GOESR_grid(position=args.goes_position, 
+                              view=args.goes_sector, 
+                              resolution=resln)
+        nadir_lon = view['nadir_lon']
+        dx = dy = view['resolution']
+        nx, ny = view['pixelsEW'], view['pixelsNS']
+        if 'centerEW' in view:
+            x_ctr, y_ctr = view['centerEW'], view['centerNS']
+        else:
+            # won't be known for mesoscale sectors. 
+            # Assume that it's in ctr_lon, ctr_lat
+            x_ctr, y_ctr = ctr_lon, ctr_lat
+        x_bnd = (np.arange(nx, dtype='float') - nx/2.0)*dx + x_ctr + 0.5*dx
+        y_bnd = (np.arange(ny, dtype='float') - ny/2.0)*dy + y_ctr + 0.5*dy
+        x_bnd = np.asarray([x_bnd.min(), x_bnd.max()])
+        y_bnd = np.asarray([y_bnd.min(), y_bnd.max()])
+        
+        geofixcs, grs80lla = get_GOESR_coordsys(sat_lon_nadir=nadir_lon)
+        ctr_lon, ctr_lat, ctr_alt = grs80lla.fromECEF(
+            *geofixcs.toECEF(x_ctr, y_ctr, 0.0))
+        fixed_grid = geofixcs
+        print(x_bnd, y_bnd, dx, dy, nx, ny)
+        
+        # Does this work? Almost - the fixed grid is actually a special
+        # projection.
+        output_writer = partial(write_cf_netcdf_fixedgrid, nadir_lon=nadir_lon)
+        
+        
 if args.is_lma:
     gridder = grid_h5flashfiles
     output_filename_prefix='LMA'
@@ -184,6 +234,10 @@ grid_kwargs=dict(proj_name=proj_name,
         min_points_per_flash = min_events,
         output_writer = output_writer,
         output_filename_prefix=output_filename_prefix, spatial_scale_factor=1.0)
+
+if args.fixed_grid:
+    grid_kwargs['fixed_grid'] = True
+    grid_kwargs['nadir_lon'] = nadir_lon
 if args.split_events:
     grid_kwargs['clip_events'] = True
 if min_groups is not None:
@@ -192,6 +246,6 @@ if args.is_lma:
     grid_kwargs['energy_grids'] = True
 else:
     grid_kwargs['energy_grids'] = ('total_energy',)
-if proj_name=='pixel_grid':
-    grid_kwargs['pixel_coords'] = ccd_grid
+if (proj_name=='pixel_grid') or (proj_name=='geos'):
+    grid_kwargs['pixel_coords'] = fixed_grid
 gridder(glm_filenames, start_time, end_time, **grid_kwargs)

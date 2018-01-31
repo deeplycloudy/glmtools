@@ -67,14 +67,14 @@ def split_event_data(split_polys, poly_areas, slicer, event_ids):
 
     return sub_polys, d
 
-
-def split_event_dataset_from_props(props):
+def split_event_dataset_from_props(props, centroid_names=('split_event_lon',
+                                                          'split_event_lat')):
     """ props is the numpy array with named dtype returned by split_event_dataset """
     
     dims = ('number_of_split_event_children',)
     d ={
-        'split_event_lon': {'dims':dims, 'data':props['poly_ctr'][:,0]},
-        'split_event_lat': {'dims':dims, 'data':props['poly_ctr'][:,1]},
+        centroid_names[0]: {'dims':dims, 'data':props['poly_ctr'][:,0]},
+        centroid_names[1]: {'dims':dims, 'data':props['poly_ctr'][:,1]},
         'split_event_mesh_area_fraction': {'dims':dims, 'data':props['mesh_frac_area']},
         'split_event_area_fraction': {'dims':dims, 'data':props['event_frac_area']},
         'split_event_mesh_x_idx': {'dims':dims, 'data':props['mesh_idx'][:,0]},
@@ -83,13 +83,14 @@ def split_event_dataset_from_props(props):
     }
     return xr.Dataset.from_dict(d)
 
-def split_flash_dataset_from_props(props):
+def split_flash_dataset_from_props(props, centroid_names=('split_flash_lon',
+                                                          'split_flash_lat')):
     """ props is the numpy array with named dtype returned by split_event_dataset """
     
     dims = ('number_of_split_flash_children',)
     d ={
-        'split_flash_lon': {'dims':dims, 'data':props['poly_ctr'][:,0]},
-        'split_flash_lat': {'dims':dims, 'data':props['poly_ctr'][:,1]},
+        centroid_names[0]: {'dims':dims, 'data':props['poly_ctr'][:,0]},
+        centroid_names[1]: {'dims':dims, 'data':props['poly_ctr'][:,1]},
         'split_flash_mesh_area_fraction': {'dims':dims, 'data':props['mesh_frac_area']},
         'split_flash_area_fraction': {'dims':dims, 'data':props['event_frac_area']},
         'split_flash_mesh_x_idx': {'dims':dims, 'data':props['mesh_idx'][:,0]},
