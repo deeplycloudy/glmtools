@@ -7,9 +7,165 @@ from glmtools.io.glm import GLMDataset
 from glmtools.grid.clipping import QuadMeshSubset
 from lmatools.grid.make_grids import FlashGridder
 from lmatools.grid.fixed import get_GOESR_coordsys
+from lmatools.grid.density_to_files import (accumulate_points_on_grid,
+    accumulate_points_on_grid_sdev, accumulate_energy_on_grid,
+    accumulate_points_on_grid_3d, accumulate_points_on_grid_sdev_3d,
+    accumulate_energy_on_grid_3d,
+    point_density, extent_density, point_density_3d, extent_density_3d, project,
+    flashes_to_frames, flash_count_log, extract_events_for_flashes)
+from lmatools.stream.subset import broadcast
 import sys
     
 class GLMGridder(FlashGridder):
+    
+    def pipeline_setup(self):
+        event_grid_area_fraction_key=self.event_grid_area_fraction_key
+        energy_grids=self.energy_grids
+        n_frames = self.n_frames
+        xedge, yedge, zedge = self.xedge, self.yedge, self.zedge
+        dx, dy, dz = self.dx, self.dy, self.dz
+        x0 = xedge[0]
+        y0 = yedge[0]
+        z0 = zedge[0]
+        mapProj = self.mapProj
+        geoProj = self.geoProj
+        
+        grid_shape = (xedge.shape[0]-1, yedge.shape[0]-1, n_frames)
+        
+        event_density_grid  = np.zeros(grid_shape, dtype='float32')
+        init_density_grid   = np.zeros(grid_shape, dtype='float32')
+        extent_density_grid = np.zeros(grid_shape, dtype='float32')
+        footprint_grid      = np.zeros(grid_shape, dtype='float32')
+        total_energy_grid   = np.zeros(grid_shape, dtype='float32')
+        flashsize_std_grid  = np.zeros(grid_shape, dtype='float32')
+        
+        self.outgrids = (
+            extent_density_grid, 
+            init_density_grid,   
+            event_density_grid,  
+            footprint_grid,
+            flashsize_std_grid,
+            total_energy_grid,
+            )
+        self.outgrids_3d = None
+
+        all_frames = []
+        for i in range(n_frames):
+            accum_event_density  = accumulate_points_on_grid(
+                event_density_grid[:,:,i], xedge, yedge, label='event')
+            accum_init_density   = accumulate_points_on_grid(
+                init_density_grid[:,:,i], xedge, yedge, label='init')
+            accum_extent_density = accumulate_points_on_grid(
+                extent_density_grid[:,:,i], xedge, yedge, 
+                grid_frac_weights=True)
+            accum_footprint      = accumulate_points_on_grid(
+                footprint_grid[:,:,i], xedge, yedge, 
+                label='footprint', grid_frac_weights=True)
+            accum_flashstd       = accumulate_points_on_grid_sdev(
+                flashsize_std_grid[:,:,i], footprint_grid[:,:,i], xedge, yedge, 
+                label='flashsize_std',  grid_frac_weights=True)
+            accum_total_energy   = accumulate_energy_on_grid(
+                total_energy_grid[:,:,i], xedge, yedge, 
+                label='total_energy',  grid_frac_weights=True)
+
+            event_density_target  = point_density(accum_event_density)
+            init_density_target   = point_density(accum_init_density)
+            extent_density_target = extent_density(x0, y0, dx, dy, 
+                accum_extent_density,
+                event_grid_area_fraction_key=event_grid_area_fraction_key)
+            mean_footprint_target = extent_density(x0, y0, dx, dy, 
+                accum_footprint, weight_key='area',
+                event_grid_area_fraction_key=event_grid_area_fraction_key)
+            total_energy_target = extent_density(x0, y0, dx, dy, 
+                accum_total_energy, weight_key='total_energy',
+                event_grid_area_fraction_key=event_grid_area_fraction_key)
+            std_flashsize_target  = extent_density(x0, y0, dx, dy, 
+                accum_flashstd, weight_key='area',
+                event_grid_area_fraction_key=event_grid_area_fraction_key)
+
+            broadcast_targets = ( 
+                project('lon', 'lat', 'alt', mapProj, geoProj, 
+                    event_density_target, use_flashes=False),
+                project('init_lon', 'init_lat', 'init_alt', mapProj, geoProj, 
+                    init_density_target, use_flashes=True),
+                project('lon', 'lat', 'alt', mapProj, geoProj, 
+                    extent_density_target, use_flashes=False),
+                project('lon', 'lat', 'alt', mapProj, geoProj, 
+                    mean_footprint_target, use_flashes=False),
+                project('lon', 'lat', 'alt', mapProj, geoProj, 
+                    std_flashsize_target, use_flashes=False),
+                project('lon', 'lat', 'alt', mapProj, geoProj, 
+                    total_energy_target, use_flashes=False),
+                )
+            spew_to_density_types = broadcast( broadcast_targets )
+
+            all_frames.append(extract_events_for_flashes(spew_to_density_types))
+
+        frame_count_log = flash_count_log(self.flash_count_logfile)
+        
+        framer = flashes_to_frames(self.t_edges_seconds, all_frames, 
+                     time_key='start', time_edges_datetime=self.t_edges, 
+                     flash_counter=frame_count_log)
+    
+        self.framer=framer
+        
+    def output_setup(self):
+        """
+        For each of the grids of interest in self.outgrids, set up the
+        outfile names, units, etc. These are all the metadata that go with the
+        actual values on the grids.
+        """
+        
+        energy_grids = self.energy_grids
+        spatial_scale_factor = self.spatial_scale_factor        
+        dx, dy, dz = self.dx, self.dy, self.dz
+            
+        if self.proj_name=='latlong':
+            density_units = "grid"
+        elif self.proj_name == 'geos':
+            density_units = '{0:7d} radians^2'.format(int(dx*dy))
+        else:
+            density_units = "{0:5.1f} km^2".format(dx*spatial_scale_factor * dy*spatial_scale_factor).lstrip()
+        time_units = "{0:5.1f} min".format(self.frame_interval/60.0).lstrip()
+        density_label = 'Count per ' + density_units + " pixel per "+ time_units
+    
+        self.outfile_postfixes = ('flash_extent.nc',
+                                  'flash_init.nc',
+                                  'source.nc',
+                                  'footprint.nc',
+                                  'specific_energy.nc',
+                                  'flashsize_std.nc',
+                                  'total_energy.nc')
+        self.outfile_postfixes_3d = None
+                                                            
+        self.field_names = ('flash_extent',
+                       'flash_initiation',
+                       'lma_source',
+                       'flash_footprint',
+                       'flashsize_std',
+                       'total_energy')
+    
+        self.field_descriptions = ('Flash extent density',
+                            'Flash initiation density',
+                            'Event density',
+                            'Average flash area',
+                            'Standard deviation of flash area',
+                            'Total radiant energy')
+        
+        self.field_units = (
+            density_label,
+            density_label,
+            density_label,
+            "km^2 per flash",
+            density_label,
+            "J per flash",
+            )
+        self.field_units_3d = None
+        
+        self.outformats = ('f', 'f', 'f', 'f', 'f', 'f')
+        self.outformats_3d = ('f', 'f', 'f', 'f', 'f', 'f')
+        
+    
     def process_flashes(self, glm, lat_bnd=None, lon_bnd=None, 
                         min_points_per_flash=1, min_groups_per_flash=1,
                         clip_events=False, fixed_grid=False,
