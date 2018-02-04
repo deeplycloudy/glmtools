@@ -70,8 +70,8 @@ def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
             
 
     out_kwargs = {}
-    for outk in ('outpath', 'output_writer', 'output_writer_3d', 'output_kwargs',
-                 'output_filename_prefix', 'spatial_scale_factor'):
+    for outk in ('outpath', 'output_writer', 'output_writer_3d',
+                 'output_kwargs', 'output_filename_prefix'):
         if outk in kwargs:
             out_kwargs[outk] = kwargs.pop(outk)
     

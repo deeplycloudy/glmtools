@@ -188,7 +188,7 @@ if pixel_grid is not None:
 if args.fixed_grid:
     proj_name = 'geos'
     if (args.goes_position != 'none') & (args.goes_sector != 'none'):
-        goes_resln_options = np.asarray([0.5, 1.0, 2.0, 4.0, 10.0])
+        goes_resln_options = np.asarray([0.5, 1.0, 2.0, 4.0, 8.0, 10.0])
         resln_idx = np.argmin(np.abs(goes_resln_options - args.dx))
         closest_resln = goes_resln_options[resln_idx]
         resln = '{0:4.1f}km'.format(closest_resln).replace(' ', '')
