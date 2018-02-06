@@ -3,7 +3,7 @@ import pandas as pd
 import xarray as xr
 
 from glmtools.io.glm import GLMDataset
-from glmtools.grid.split_events import split_event_data, split_event_dataset_from_props, split_flash_dataset_from_props, replicate_and_weight_split_child_dataset
+from glmtools.grid.split_events import split_event_data, split_event_dataset_from_props, split_group_dataset_from_props, split_flash_dataset_from_props, replicate_and_weight_split_child_dataset
 from glmtools.grid.clipping import QuadMeshPolySlicer, join_polys
 from glmtools.io.ccd import load_pixel_corner_lookup, quads_from_corner_lookup
 from glmtools.io.lightning_ellipse import ltg_ellps_lon_lat_to_fixed_grid
@@ -49,6 +49,7 @@ def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
         event_lats = flash_data.event_lat.data
         event_ids = flash_data.event_id.data
         event_parent_flash_ids = flash_data.event_parent_flash_id.data
+        event_parent_group_ids = flash_data.event_parent_group_id.data
         
         # On a per-flash basis, and eventually on a per-group basis,
         # we want to union all events for each parent. This gives a master
@@ -119,6 +120,52 @@ def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
         else:
             split_event_dataset = split_event_dataset_from_props(split_event_properties)
         split_event_dataset = replicate_and_weight_split_child_dataset(glm, split_event_dataset)
+
+        # --- Now split the groups ---
+        unique_gr_ids = np.unique(event_parent_group_ids)
+        poly_index = dict(((k,[]) for k in unique_gr_ids))
+        for split_poly, group_id in zip(event_polys_inflated, event_parent_group_ids):
+            poly_index[group_id].append(split_poly)
+
+        union_polys = []
+        union_group_ids = []
+        for gr_id, gr_polys in poly_index.items():
+            gr_join_poly = join_polys(gr_polys)
+            union_polys.extend(gr_join_poly)
+            union_group_ids.extend([gr_id,]*len(gr_join_poly))
+
+        chopped_union_polys, poly_union_areas = slicer.slice(union_polys, bbox=True)    
+        split_group_polys, split_group_properties = split_event_data(chopped_union_polys, 
+            poly_union_areas, slicer, event_ids=union_group_ids)
+        if fixed_grid:
+            # Use variable names that indicate the fixed grid polygon centroid
+            # coordinates are x,y. Then, convert those coordinates to lon, lat
+            # referenced to the earth (not lightning) ellipsoid, because
+            # lmatools expects lon, lat as input to its gridding routines.
+            # These will be wastefully re-transformed back into fixed grid 
+            # coordinates when gridded onto the fixed grid, but this approch
+            # also allows gridding to arbitrary other target grids.
+            split_group_dataset = split_group_dataset_from_props(
+                split_group_properties, centroid_names=('split_group_x',
+                                                        'split_group_y'))
+            fixed_x_ctr = split_group_dataset['split_group_x'].data
+            fixed_y_ctr = split_group_dataset['split_group_y'].data
+            fixed_z_ctr = np.zeros_like(fixed_x_ctr)
+            split_group_lon, split_group_lat, split_group_alt = grs80lla.fromECEF(
+                *geofixcs.toECEF(fixed_x_ctr, fixed_y_ctr, fixed_z_ctr))
+            split_dims = getattr(split_group_dataset, 
+                'split_group_parent_group_id').dims
+            split_group_dataset['split_group_lon'] = (split_dims, split_group_lon)
+            split_group_dataset['split_group_lat'] = (split_dims, split_group_lat)
+        else:
+            split_group_dataset = split_group_dataset_from_props(
+                split_group_properties)              
+
+        split_group_dataset = replicate_and_weight_split_child_dataset(glm, split_group_dataset,        
+            parent_id='group_id', split_child_parent_id='split_group_parent_group_id',
+            names=['group_time_offset', 'group_area', 'group_energy'],
+            weights={'group_energy':'split_group_area_fraction',
+                     'group_area':'split_group_area_fraction'})
                 
         # --- Now split the flashes ---
         
@@ -171,7 +218,9 @@ def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
         
     try:
         fake_lma = mimic_lma_dataset(flash_data, base_date,
-            split_events=split_event_dataset, split_flashes=split_flash_dataset)
+            split_events=split_event_dataset, 
+            split_groups=split_group_dataset,
+            split_flashes=split_flash_dataset)
         # *_flashes and *_events and are really the properties of the
         # parent entity (one row per entity) and their constituent
         # components that cover space. Don't take "_events" and
@@ -181,15 +230,19 @@ def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
         # are only two levels of hierarchy, and where the events have no
         # spatial extent that can be further split.
         fl_events, fl_flashes = fake_lma['flash']
+        gr_events, gr_flashes = fake_lma['group']
         ev_events, ev_flashes = fake_lma['event']
         
         if target is not None:
             if fl_events.shape[0] >= 1:
                 flash_target = target['flash']
+                group_target = target['group']
                 event_target = target['event']                
                 flash_target.send((fl_events, fl_flashes))
+                group_target.send((gr_events, gr_flashes))
                 event_target.send((ev_events, ev_flashes))
-                del fl_events, fl_flashes, ev_events, ev_flashes, fake_lma
+                del fl_events, fl_flashes, ev_events, ev_flashes
+                del gr_events, gr_flashes, fake_lma
         else:
             return fake_lma
     except KeyError as ke:
@@ -225,7 +278,7 @@ flash_dtype=[('area', '<f4'),  ('total_energy', '<f4'),
              ('flash_id', '<i4'),  ('n_points', '<i2'),  ]
 
 def _fake_lma_from_glm_flashes(flash_data, basedate, 
-        split_events=None, split_flashes=None):
+        split_events=None, split_groups=None, split_flashes=None):
     """ `flash_data` is an xarray dataset of flashes, groups, and events for
          (possibly more than one) lightning flash. `flash_data` can be generated
          with `GLMDataset.subset_flashes` or `GLMDataset.get_flashes`.
@@ -286,9 +339,73 @@ def _fake_lma_from_glm_flashes(flash_data, basedate,
     flash_np['specific_energy'] = 0.0
     
     return event_np, flash_np
+    
+def _fake_lma_from_glm_groups(flash_data, basedate, 
+        split_events=None, split_groups=None, split_flashes=None):
+    """ `flash_data` is an xarray dataset of flashes, groups, and events for
+         (possibly more than one) lightning flash. `flash_data` can be generated
+         with `GLMDataset.subset_flashes` or `GLMDataset.get_flashes`.
+        
+        Here we create fake LMA events using the group-level data. If we have
+        split group data, it means the fake LMA events were generated by 
+        splitting the polygon resulting from the union of all events that are a
+        part of each group.
+    """
+    
+    flash_np = np.empty_like(flash_data.group_id.data, dtype=flash_dtype)
+    if split_events is not None:
+        event_np = np.empty_like(split_groups.split_group_lon.data, dtype=event_dtype)
+    else:
+        event_np = np.empty_like(flash_data.event_id.data, dtype=event_dtype)
+
+    if flash_np.shape[0] == 0:
+        # no data, nothing to do
+        return event_np, flash_np
+        
+    if split_groups is not None:
+        event_np['flash_id'] = split_groups.split_group_parent_group_id.data
+        event_np['lat'] = split_groups.split_group_lat
+        event_np['lon'] = split_groups.split_group_lon
+        t_event = sec_since_basedate(split_groups.split_group_time_offset.data, basedate)
+        event_np['time'] = t_event
+        event_np['power'] = split_groups.split_group_energy
+        event_np['mesh_frac'] = np.abs(split_groups.split_group_mesh_area_fraction.data)
+        event_np['mesh_xi'] = split_groups.split_group_mesh_x_idx.data
+        event_np['mesh_yi'] = split_groups.split_group_mesh_y_idx.data
+    else:
+        event_np['flash_id'] = flash_data.event_parent_group_id.data
+        event_np['lat'] = flash_data.event_lat
+        event_np['lon'] = flash_data.event_lon
+        t_event = sec_since_basedate(flash_data.event_time_offset.data, basedate)
+        event_np['time'] = t_event
+        event_np['power'] = flash_data.event_energy
+
+    flash_np['area'] = flash_data.group_area.data
+    flash_np['total_energy'] = flash_data.group_energy.data
+    flash_np['ctr_lon'] = flash_data.group_lon.data
+    flash_np['ctr_lat'] = flash_data.group_lat.data
+    flash_np['init_lon'] = flash_data.group_lon.data
+    flash_np['init_lat'] = flash_data.group_lat.data
+    t_start = sec_since_basedate(flash_data.group_time_offset.data, basedate)
+    t_end = sec_since_basedate(flash_data.group_time_offset.data, basedate)
+    flash_np['start'] = t_start
+    flash_np['duration'] = t_end-t_start
+    flash_np['flash_id'] = flash_data.group_id.data
+    flash_np['n_points'] = flash_data.number_of_events.shape[0]
+    
+    # Fake the altitude data
+    event_np['alt'] = 0.0
+    flash_np['ctr_alt'] = 0.0
+    flash_np['init_alt'] = 0.0
+    
+    # Fake the specific energy data
+    flash_np['specific_energy'] = 0.0
+    
+    return event_np, flash_np
+    
 
 def _fake_lma_from_glm_events(flash_data, basedate, 
-        split_events=None, split_flashes=None):
+        split_events=None, split_groups=None, split_flashes=None):
     """ `flash_data` is an xarray dataset of flashes, groups, and events for
          (possibly more than one) lightning flash. `flash_data` can be generated
          with `GLMDataset.subset_flashes` or `GLMDataset.get_flashes`.
@@ -309,7 +426,7 @@ def _fake_lma_from_glm_events(flash_data, basedate,
         # no data, nothing to do
         return event_np, flash_np
         
-    if split_flashes is not None:
+    if split_events is not None:
         event_np['flash_id'] = split_events.split_event_parent_event_id.data
         event_np['lat'] = split_events.split_event_lat
         event_np['lon'] = split_events.split_event_lon
@@ -352,15 +469,22 @@ def _fake_lma_from_glm_events(flash_data, basedate,
 
 
 def mimic_lma_dataset(flash_data, basedate, 
-                      split_events=None, split_flashes=None):
+                      split_events=None, 
+                      split_groups=None,
+                      split_flashes=None):
     """ Mimic the LMA data structure from GLM """        
     fl_events, fl_flashes = _fake_lma_from_glm_flashes(flash_data, basedate,
-        split_events=split_events, split_flashes=split_flashes)
-
+        split_events=split_events, split_groups=split_groups, 
+        split_flashes=split_flashes)
+    gr_events, gr_flashes = _fake_lma_from_glm_groups(flash_data, basedate,
+        split_events=split_events, split_groups=split_groups, 
+        split_flashes=split_flashes)
     ev_events, ev_flashes = _fake_lma_from_glm_events(flash_data, basedate,
-        split_events=split_events, split_flashes=split_flashes)
+        split_events=split_events, split_groups=split_groups, 
+        split_flashes=split_flashes)
         
     fake_lma = {'flash': (fl_events, fl_flashes),
+                'group': (gr_events, gr_flashes),
                 'event': (ev_events, ev_flashes),
                }
     return fake_lma

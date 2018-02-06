@@ -83,6 +83,22 @@ def split_event_dataset_from_props(props, centroid_names=('split_event_lon',
     }
     return xr.Dataset.from_dict(d)
 
+def split_group_dataset_from_props(props, centroid_names=('split_group_lon',
+                                                          'split_group_lat')):
+    """ props is the numpy array with named dtype returned by split_event_dataset """
+    
+    dims = ('number_of_split_group_children',)
+    d ={
+        centroid_names[0]: {'dims':dims, 'data':props['poly_ctr'][:,0]},
+        centroid_names[1]: {'dims':dims, 'data':props['poly_ctr'][:,1]},
+        'split_group_mesh_area_fraction': {'dims':dims, 'data':props['mesh_frac_area']},
+        'split_group_area_fraction': {'dims':dims, 'data':props['event_frac_area']},
+        'split_group_mesh_x_idx': {'dims':dims, 'data':props['mesh_idx'][:,0]},
+        'split_group_mesh_y_idx': {'dims':dims, 'data':props['mesh_idx'][:,1]},
+        'split_group_parent_group_id': {'dims':dims, 'data':props['event_id']},
+    }
+    return xr.Dataset.from_dict(d)
+
 def split_flash_dataset_from_props(props, centroid_names=('split_flash_lon',
                                                           'split_flash_lat')):
     """ props is the numpy array with named dtype returned by split_event_dataset """

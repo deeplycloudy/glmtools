@@ -151,6 +151,13 @@ class GLMGridder(FlashGridder):
         (init_density_grid, extent_density_grid, footprint_grid,
             flashsize_std_grid) = flash_outgrids
 
+        # From a data structure point of view, there is no difference
+        # between the group and flash grids. Later, if there are differnces,
+        # just copy the flash_pipeline_setup method and start modifying.
+        group_outgrids, group_framer = self.flash_pipeline_setup()
+        (group_centroid_density_grid, group_extent_density_grid, 
+            group_footprint_grid, groupsize_std_grid) = group_outgrids
+
         event_outgrids, event_framer = self.event_pipeline_setup()
         event_density_grid, total_energy_grid = event_outgrids
 
@@ -159,12 +166,17 @@ class GLMGridder(FlashGridder):
             init_density_grid,
             event_density_grid,
             footprint_grid,
-            flashsize_std_grid,
+            # flashsize_std_grid,
             total_energy_grid,
+            group_extent_density_grid, 
+            group_centroid_density_grid, 
+            group_footprint_grid, 
+            # groupsize_std_grid
             )
         self.outgrids_3d = None
 
         all_framers = {'flash': flash_framer,
+                       'group': group_framer,
                        'event': event_framer,
                       }
 
@@ -194,36 +206,50 @@ class GLMGridder(FlashGridder):
                                   'flash_init.nc',
                                   'source.nc',
                                   'footprint.nc',
-                                  'flashsize_std.nc',
-                                  'total_energy.nc')
+                                  # 'flashsize_std.nc',
+                                  'total_energy.nc',
+                                  'group_extent.nc',
+                                  'group_init.nc',
+                                  'group_area.nc',)
         self.outfile_postfixes_3d = None
                                                             
         self.field_names = ('flash_extent_density',
                        'flash_centroid_density',
                        'event_density',
                        'average_flash_area',
-                       'standard_deviation_flash_area',
-                       'total_energy')
+                       # 'standard_deviation_flash_area',
+                       'total_energy',
+                       'group_extent_density',
+                       'group_centroid_density',
+                       'average_group_area',
+                       )
     
         self.field_descriptions = ('Flash extent density',
                             'Flash initiation density',
                             'Event density',
                             'Average flash area',
-                            'Standard deviation of flash area',
-                            'Total radiant energy')
+                            # 'Standard deviation of flash area',
+                            'Total radiant energy',
+                            'Group extent density',
+                            'Group centroid density',
+                            'Average group area',
+                            )
         
         self.field_units = (
             density_label,
             density_label,
             density_label,
             "km^2 per flash",
-            "km^2",
+            # "km^2",
             "J per flash",
+            density_label,
+            density_label,
+            "km^2 per group",
             )
         self.field_units_3d = None
         
-        self.outformats = ('f', 'f', 'f', 'f', 'f', 'f')
-        self.outformats_3d = ('f', 'f', 'f', 'f', 'f', 'f')
+        self.outformats = ('f',) * 8
+        self.outformats_3d = ('f',) * 8
         
     
     def process_flashes(self, glm, lat_bnd=None, lon_bnd=None, 
