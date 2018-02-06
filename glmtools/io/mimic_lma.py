@@ -148,7 +148,9 @@ def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
             split_events=split_event_dataset, split_flashes=split_flash_dataset)
         if target is not None:
             if events.shape[0] >= 1:
-                target.send((events, flashes))
+                flash_target = target['flash']
+                event_target = target['event']
+                flash_target.send((events, flashes))
                 del events, flashes
         else:
             return events, flashes
