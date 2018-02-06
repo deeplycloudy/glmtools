@@ -111,7 +111,9 @@ class GLMGridder(FlashGridder):
                 total_energy_grid[:,:,i], xedge, yedge,
                 label='total_energy',  grid_frac_weights=True)
 
-            event_density_target  = point_density(accum_event_density)
+            event_density_target  = extent_density(x0, y0, dx, dy,
+                accum_event_density,
+                event_grid_area_fraction_key=event_grid_area_fraction_key)
             total_energy_target = extent_density(x0, y0, dx, dy,
                 accum_total_energy, weight_key='total_energy',
                 event_grid_area_fraction_key=event_grid_area_fraction_key)
