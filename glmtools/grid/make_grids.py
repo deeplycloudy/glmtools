@@ -107,16 +107,20 @@ class GLMGridder(FlashGridder):
             accum_event_density  = accumulate_points_on_grid(
                 event_density_grid[:,:,i], xedge, yedge,
                 label='event', grid_frac_weights=True)
-            accum_total_energy   = accumulate_energy_on_grid(
-                total_energy_grid[:,:,i], xedge, yedge,
-                label='total_energy',  grid_frac_weights=True)
-
             event_density_target  = extent_density(x0, y0, dx, dy,
                 accum_event_density,
                 event_grid_area_fraction_key=event_grid_area_fraction_key)
-            total_energy_target = extent_density(x0, y0, dx, dy,
-                accum_total_energy, weight_key='total_energy',
-                event_grid_area_fraction_key=event_grid_area_fraction_key)
+                
+            # total_energy is built from split_event_energy, which has
+            # already divided up the event energy into the sub-event
+            # corresponding to each pixel. We don't need to weight by the
+            # grid fractional area. We just need to sum the  'power' variable
+            # which mimic_lma assigns the values of split_event_energy.
+            accum_total_energy   = accumulate_energy_on_grid(
+                total_energy_grid[:,:,i], xedge, yedge,
+                label='total_energy',  grid_frac_weights=False)
+            total_energy_target = point_density(accum_total_energy,
+                weight_key='power', weight_flashes=False)
 
             broadcast_targets = (
                  project('lon', 'lat', 'alt', mapProj, geoProj,
@@ -328,6 +332,8 @@ def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
         sys.stdout.flush()
         glm = GLMDataset(filename)
         gridder.process_flashes(glm, **process_flash_kwargs)
+        glm.dataset.close()
+        del glm
 
     output = gridder.write_grids(**out_kwargs)
     return output    
