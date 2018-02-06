@@ -217,8 +217,8 @@ def _fake_lma_from_glm(flash_data, basedate,
         event_np['time'] = t_event
         event_np['power'] = flash_data.event_energy
 
-    flash_np['area'] = flash_data.flash_area
-    flash_np['total_energy'] = flash_data.flash_energy
+    flash_np['area'] = flash_data.flash_area.data
+    flash_np['total_energy'] = flash_data.flash_energy.data
     flash_np['ctr_lon'] = flash_data.flash_lon.data
     flash_np['ctr_lat'] = flash_data.flash_lat.data
     flash_np['init_lon'] = flash_data.flash_lon.data

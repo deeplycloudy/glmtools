@@ -19,6 +19,9 @@ import sys
 class GLMGridder(FlashGridder):
     
     def pipeline_setup(self):
+        """
+        
+        """
         event_grid_area_fraction_key=self.event_grid_area_fraction_key
         energy_grids=self.energy_grids
         n_frames = self.n_frames
@@ -57,7 +60,7 @@ class GLMGridder(FlashGridder):
                 init_density_grid[:,:,i], xedge, yedge, label='init')
             accum_extent_density = accumulate_points_on_grid(
                 extent_density_grid[:,:,i], xedge, yedge, 
-                grid_frac_weights=True)
+                label='extent', grid_frac_weights=True)
             accum_footprint      = accumulate_points_on_grid(
                 footprint_grid[:,:,i], xedge, yedge, 
                 label='footprint', grid_frac_weights=True)
@@ -133,7 +136,6 @@ class GLMGridder(FlashGridder):
                                   'flash_init.nc',
                                   'source.nc',
                                   'footprint.nc',
-                                  'specific_energy.nc',
                                   'flashsize_std.nc',
                                   'total_energy.nc')
         self.outfile_postfixes_3d = None
@@ -157,7 +159,7 @@ class GLMGridder(FlashGridder):
             density_label,
             density_label,
             "km^2 per flash",
-            density_label,
+            "km^2",
             "J per flash",
             )
         self.field_units_3d = None
