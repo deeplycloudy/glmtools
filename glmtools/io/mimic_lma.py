@@ -42,6 +42,7 @@ def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
     else:
         flash_data = glm.dataset
     split_event_dataset=None
+    split_group_dataset=None
     split_flash_dataset=None
     if clip_events:
         mesh = clip_events
