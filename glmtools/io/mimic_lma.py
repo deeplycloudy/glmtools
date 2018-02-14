@@ -20,10 +20,11 @@ from lmatools.grid.fixed import get_GOESR_coordsys
 # for events, flashes in h5s: # get a stream of events, flashes 
 #     print events.dtype
 #     print flashes.dtype
-
+        
 def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
                  min_events=None, min_groups=None, clip_events=True,
-                 fixed_grid=False, nadir_lon=None):
+                 fixed_grid=False, nadir_lon=None, 
+                 corner_pickle='/data/LCFA-production/L1b/G16_corner_lut_fixedgrid.pickle'):
     """ This routine is the data pipeline source, responsible for pushing out 
         events and flashes. Using a different flash data source format is a 
         matter of replacing this routine to read in the necessary event 
@@ -71,8 +72,7 @@ def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
         # unioning by a little bit to avoid the above problem.
         
         if fixed_grid:
-            x_lut, y_lut, corner_lut = load_pixel_corner_lookup(
-                '/data/LCFA-production/L1b/G16_corner_lut_fixedgrid.pickle')
+            x_lut, y_lut, corner_lut = load_pixel_corner_lookup(corner_pickle)
             # Convert from microradians to radians
             x_lut = x_lut * 1.0e-6
             y_lut = y_lut * 1.0e-6
@@ -85,7 +85,8 @@ def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
                 corner_lut, event_x, event_y, inflate=1.02)
         else:
             lon_lut, lat_lut, corner_lut = load_pixel_corner_lookup(
-                '/data/LCFA-production/L1b/G16_corner_lut_lonlat.pickle')
+                corner_pickle)
+                # '/data/LCFA-production/L1b/G16_corner_lut_lonlat.pickle')
             event_polys = quads_from_corner_lookup(lon_lut, lat_lut, 
                 corner_lut, event_lons, event_lats, nadir_lon=nadir_lon)
             event_polys_inflated = quads_from_corner_lookup(lon_lut, lat_lut, 
@@ -93,10 +94,10 @@ def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
                 inflate=1.02)
 
         slicer = QuadMeshPolySlicer(mesh)
-        
         # --- Split up the events ---
-        
+        print("Starting to split events")
         chopped_polys, poly_areas = slicer.slice(event_polys)
+        print("Sliced all events")
         split_event_polys, split_event_properties = split_event_data(chopped_polys, poly_areas, slicer, event_ids=event_ids)
         if fixed_grid:
             # Use variable names that indicate the fixed grid polygon centroid
@@ -120,9 +121,11 @@ def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
             split_event_dataset['split_event_lat'] = (split_dims, split_event_lat)
         else:
             split_event_dataset = split_event_dataset_from_props(split_event_properties)
+        print("Calculated split event properties")
         split_event_dataset = replicate_and_weight_split_child_dataset(glm, split_event_dataset)
-
+        print("Finished replicated event dataset")
         # --- Now split the groups ---
+        print("Starting to split groups")
         unique_gr_ids = np.unique(event_parent_group_ids)
         poly_index = dict(((k,[]) for k in unique_gr_ids))
         for split_poly, group_id in zip(event_polys_inflated, event_parent_group_ids):
@@ -136,6 +139,7 @@ def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
             union_group_ids.extend([gr_id,]*len(gr_join_poly))
 
         chopped_union_polys, poly_union_areas = slicer.slice(union_polys, bbox=True)    
+        print("Sliced all groups")
         split_group_polys, split_group_properties = split_event_data(chopped_union_polys, 
             poly_union_areas, slicer, event_ids=union_group_ids)
         if fixed_grid:
@@ -161,15 +165,15 @@ def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
         else:
             split_group_dataset = split_group_dataset_from_props(
                 split_group_properties)              
-
+        print("Calculated split group properties")
         split_group_dataset = replicate_and_weight_split_child_dataset(glm, split_group_dataset,        
             parent_id='group_id', split_child_parent_id='split_group_parent_group_id',
             names=['group_time_offset', 'group_area', 'group_energy'],
             weights={'group_energy':'split_group_area_fraction',
                      'group_area':'split_group_area_fraction'})
-                
+        print("Finished replicated group dataset")        
         # --- Now split the flashes ---
-        
+        print("Starting to split flashes")
         unique_fl_ids = np.unique(event_parent_flash_ids)
         poly_index = dict(((k,[]) for k in unique_fl_ids))
         for split_poly, flash_id in zip(event_polys_inflated, event_parent_flash_ids):
@@ -183,7 +187,8 @@ def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
             union_flash_ids.extend([fl_id,]*len(fl_join_poly))
         # all_flash_sub_polys = [p for p in itertools.chain.from_iterable(poly_index.values())]
 
-        chopped_union_polys, poly_union_areas = slicer.slice(union_polys, bbox=True)    
+        chopped_union_polys, poly_union_areas = slicer.slice(union_polys, bbox=True)
+        print("Sliced all flashes") 
         split_flash_polys, split_flash_properties = split_event_data(chopped_union_polys, 
             poly_union_areas, slicer, event_ids=union_flash_ids)
         if fixed_grid:
@@ -209,13 +214,14 @@ def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
         else:
             split_flash_dataset = split_flash_dataset_from_props(
                 split_flash_properties)              
-            
+        print("Calculated split flash properties")
         split_flash_dataset = replicate_and_weight_split_child_dataset(glm, split_flash_dataset,        
             parent_id='flash_id', split_child_parent_id='split_flash_parent_flash_id',
             names=['flash_time_offset_of_first_event', 'flash_time_offset_of_last_event',
                    'flash_area', 'flash_energy'],
             weights={'flash_energy':'split_flash_area_fraction',
                      'flash_area':'split_flash_area_fraction'})
+        print("Finished replicated flash dataset")        
         
     try:
         fake_lma = mimic_lma_dataset(flash_data, base_date,

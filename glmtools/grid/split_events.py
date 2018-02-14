@@ -115,7 +115,6 @@ def split_flash_dataset_from_props(props, centroid_names=('split_flash_lon',
     }
     return xr.Dataset.from_dict(d)
 
-
 def replicate_and_weight_split_child_dataset(glm, split_child_dataset,
         parent_id='event_id', split_child_parent_id='split_event_parent_event_id',
         names=['event_energy', 'event_time_offset',
@@ -136,17 +135,13 @@ def replicate_and_weight_split_child_dataset(glm, split_child_dataset,
     split_dims = getattr(split_child_dataset, split_child_parent_id).dims
     replicated_event_ids = getattr(split_child_dataset, split_child_parent_id)
 
-    # replicate the parent properties (e.g.,radiant energy) using the
-    # replicated event_ids.
-    # This chunk is stolen from the traversal.replicate_parent_id class
-    # and should be moved back there after it's generalized.
-    grouper = glm.entity_groups[parent_id]
-    e_idx = [grouper.groups[eid] for eid in replicated_event_ids.data]
-    e_idx_flat = np.asarray(e_idx, dtype=replicated_event_ids.dtype).flatten()
+    # it is important that this step keep the events in the same order
+    # and retain the replication.
+    glm_data = glm.reduce_to_entities(parent_id, replicated_event_ids)
     
     for name in names:
         new_name = 'split_' + name
-        new_var = getattr(glm.dataset, name)[e_idx_flat].data
+        new_var = getattr(glm_data, name).data
         if name in weights:
             weight_var = getattr(split_child_dataset, weights[name])
             # dimension names won't match, but lengths should.

@@ -259,7 +259,7 @@ class GLMGridder(FlashGridder):
     def process_flashes(self, glm, lat_bnd=None, lon_bnd=None, 
                         min_points_per_flash=1, min_groups_per_flash=1,
                         clip_events=False, fixed_grid=False,
-                        nadir_lon=None):
+                        nadir_lon=None, corner_pickle=None):
         self.min_points_per_flash = min_points_per_flash
         if min_points_per_flash is None:
             # the FlashGridder class from lmatools needs an int to be able to
@@ -276,7 +276,6 @@ class GLMGridder(FlashGridder):
                      lon_range=lon_bnd, lat_range=lat_bnd,
                      clip_events=clip_events, fixed_grid=fixed_grid,
                      nadir_lon=nadir_lon)
-
         
 def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
     """ Grid GLM data that has been converted to an LMA-like array format.
@@ -291,7 +290,7 @@ def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
     
     process_flash_kwargs = {}
     for prock in ('min_points_per_flash','min_groups_per_flash',
-                  'clip_events', 'fixed_grid', 'nadir_lon'):
+                  'clip_events', 'fixed_grid', 'nadir_lon', 'corner_pickle'):
         # interpret x_bnd and y_bnd as lon, lat
         if prock in kwargs:
             process_flash_kwargs[prock] = kwargs.pop(prock)
@@ -304,6 +303,12 @@ def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
         geofixcs, grs80lla = get_GOESR_coordsys(sat_lon_nadir=nadir_lon)
         lon_bnd, lat_bnd, alt_bnd = grs80lla.fromECEF( *geofixcs.toECEF(
             kwargs['x_bnd'], kwargs['y_bnd'], kwargs['x_bnd']*0.0))
+        # Both bounds are inf if the fixed grid location is off the edge of
+        # the earth. Later, when flashes are subset by glm.subset_flashes,
+        # this causes the subset to be empty. 
+        #Work around that by setting the left bound to -infinity 
+        if lon_bnd[0] == np.inf: lon_bnd[0] *= -1
+        if lat_bnd[0] == np.inf: lat_bnd[0] *= -1
         process_flash_kwargs['lon_bnd'] = lon_bnd
         process_flash_kwargs['lat_bnd'] = lat_bnd
     else:
@@ -321,16 +326,25 @@ def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
         if outk in kwargs:
             out_kwargs[outk] = kwargs.pop(outk)
     
+    print ('gridder kwargs are', kwargs)
     gridder = GLMGridder(start_time, end_time, **kwargs)
 
     if 'clip_events' in process_flash_kwargs:
         xedge,yedge=np.meshgrid(gridder.xedge,gridder.yedge)
-        mesh = QuadMeshSubset(xedge, yedge, n_neighbors=16*10)
+        mesh = QuadMeshSubset(xedge, yedge, n_neighbors=16*10, regular=True)
+        # import pickle
+        # with open('/data/LCFA-production/L1b/mesh_subset.pickle', 'wb') as f:
+            # pickle.dump(mesh, f)
         process_flash_kwargs['clip_events'] = mesh
     for filename in GLM_filenames:
         print("Processing {0}".format(filename))
+        print('process flash kwargs are', process_flash_kwargs)
         sys.stdout.flush()
         glm = GLMDataset(filename)
+        # Pre-load the whole dataset, as recommended by the xarray docs. 
+        # This saves an absurd amount of time (factor of 80ish) in 
+        # grid.split_events.replicate_and_split_events
+        glm.dataset.load() 
         gridder.process_flashes(glm, **process_flash_kwargs)
         glm.dataset.close()
         del glm

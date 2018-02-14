@@ -28,7 +28,21 @@ from glmtools.io.ccd import create_pixel_lookup
 import pyclipper
 from pyclipper import Pyclipper, PolyTreeToPaths, ClosedPathsFromPolyTree, scale_to_clipper, scale_from_clipper
 
-
+def vectorized_poly_area(x,y):
+    """ Calculate the area of a non-self-intersecting planar polygon.
+        x0y1 - x0y0 + x1y2 - x2y1 + x2y3 - x2y2 + ... + xny0 - x0yn
+    
+        Operate on all N polygons with M vertices, where x and y
+        both have shape N, M
+    """
+    # determinant
+    det = x[:, :-1]*y[:, 1:] - x[:, 1:]*y[:, :-1]
+    area = det.sum(axis=1)
+    # wrap-around terms in determinant
+    area += x[:, -1]*y[:, 0] - x[:, 0]*y[:,-1]
+    area *= 0.5
+    return area
+    
 def poly_area(x,y):
     """ Calculate the area of a non-self-intersecting planar polygon.
         x0y1 - x0y0 + x1y2 - x2y1 + x2y3 - x2y2 + ... + xny0 - x0yn
@@ -86,7 +100,7 @@ def polys_from_quadmesh(x, y):
     quads[:,:,2,:] = v[ 1:,  1:, :]
     quads[:,:,3,:] = v[ 1:, :-1, :]
     return quads
-    
+
 class QuadMeshSubset(object):
     """ Given a quadmesh, create a KDTree for use in grabbing a subset of the
     quadrilaterals comprising the mesh. We don't assume a regular grid,
@@ -94,7 +108,8 @@ class QuadMeshSubset(object):
     
     Uses the centroid of the quads because we only need to get close enough.
     """
-    def __init__(self, xedge, yedge, n_neighbors=12, X_ctr=None, Y_ctr=None):
+    def __init__(self, xedge, yedge, n_neighbors=12, X_ctr=None, Y_ctr=None,
+        regular=False):
         """ xedge and yedge are the x and y edge coordinates of a quadrilateral mesh
 
         min_neighbors is the minimum number of neighbors returned
@@ -106,7 +121,8 @@ class QuadMeshSubset(object):
         # We will assume that no observed polygons are narrower than the square root of the target grid area. Worst case would be a polygon that fit entirely with one row or column. Then the number of polygons to find would be min((sqrt(P)/sqrt(G)+1)^2, 4). 4 is minimum in case of the tiniest polygon across an arbitrarily large grid.
     
         # By example, for a 1 km grid and an 8 km poly, the max height would be 8, pad with one, to get 81 grid cells. For a 2 km grid and an 8 km poly, 4+1 grid cells or 25 grid cells. For an 8 km grid, 4 grid cells.
-    
+        
+        self.regular = regular
         self.n_neighbors = n_neighbors
         self.xedge = xedge
         self.yedge = yedge
@@ -118,8 +134,7 @@ class QuadMeshSubset(object):
                      yedge[1:, :-1] + yedge[:-1, 1:])/4.0
         self.X_ctr = X_ctr
         self.Y_ctr = Y_ctr
-        
-        
+            
         print('Calculating polygons from mesh ...')
         # all_quad_idx0, all_quad_idx1 = (np.arange(X_ctr.shape[0]),
         #                                            np.arange(X_ctr.shape[1]))
@@ -132,11 +147,14 @@ class QuadMeshSubset(object):
         
         self.quads = polys_from_quadmesh(xedge, yedge)
         nq = self.quads.shape[0] * self.quads.shape[1]
+        print('    ... {0} quads in mesh ...'.format(nq))
         self.quads_flat = self.quads.view()
         self.quads_flat.shape = (nq, 4, 2) # flatten the first two dimensions
-        self.quad_areas = np.abs(np.fromiter(
-            (poly_area(q[:,0], q[:,1]) for q in self.quads_flat),
-            dtype='f8'))
+        self.quad_areas = vectorized_poly_area(self.quads_flat[:, :, 0],
+                                               self.quads_flat[:, :, 1])
+        # self.quad_areas = np.abs(np.fromiter(
+            # (poly_area(q[:,0], q[:,1]) for q in self.quads_flat),
+            # dtype='f8', count=nq))
         self.quad_areas.shape = self.X_ctr.shape
         
         # if min_mesh_size is None:
@@ -144,12 +162,39 @@ class QuadMeshSubset(object):
 #         print("Min mesh size is", min_mesh_size, " and max poly area is ", max_poly_area)
 #         P, G = max_poly_area, min_mesh_size
 ## self.min_neighbors = max(int((np.sqrt(P)/np.sqrt(G)+1)**2), 8)
-        
-        # We reuse this function that was spec'd in terms of lon/lat, but it's
-        # actually general for a quadmesh in any coordinate system.
-        print('    ... constructing search tree ... be patient ...')
-        self.tree, self.Xi, self.Yi = create_pixel_lookup(X_ctr, Y_ctr, leaf_size=16)
-        print('    ... done.')
+        if regular:
+            print('    ... determining regular grid arrangement ...')
+            # if we have a regular grid, by definition one of the
+            # two dimensions has constant values. Depending on how meshgrid
+            # was used, that may be along either dimension one or two
+            if np.allclose(xedge[:,0].mean() - xedge[:,0], 0.0):
+                # constant values indicate this
+                # is not the increasing dimension for x
+                self.X_ctr1d = self.X_ctr[0,:]
+                self.Y_ctr1d = self.Y_ctr[:,0]
+                self.X_edge1d = self.xedge[0,:]
+                self.Y_edge1d = self.yedge[:,0]
+                self.X_increasing_dim = 1
+                self.Y_increasing_dim = 0
+            else:
+                # this is the increasing dimension
+                self.X_ctr1d = self.X_ctr[:,0]
+                self.Y_ctr1d = self.Y_ctr[0,:]
+                self.X_edge1d = self.xedge[:,0]
+                self.Y_edge1d = self.yedge[0,:]
+                self.X_increasing_dim = 0
+                self.Y_increasing_dim = 1
+            self.Xi1d = np.arange(0, len(self.X_ctr1d))
+            self.Yi1d = np.arange(0, len(self.Y_ctr1d))
+            self.N_X_ctr = self.X_ctr1d.shape[0]
+            self.N_Y_ctr = self.Y_ctr1d.shape[0]
+            print('    ... done.')
+        else:
+            # We reuse this function that was spec'd in terms of lon/lat, but it's
+            # actually general for a quadmesh in any coordinate system.
+            print('    ... constructing search tree ... be patient ...')
+            self.tree, self.Xi, self.Yi = create_pixel_lookup(X_ctr, Y_ctr, leaf_size=16)
+            print('    ... done.')
         
         
     # def gen_polys(self, xidx, yidx):
@@ -167,10 +212,17 @@ class QuadMeshSubset(object):
         returns dist, quad_x_idxs, quad_y_idxs. These are indices into the pixel center arrays
         but also work as the low-index corner of the edge arrays
         """
-        # idx = self.tree.query_radius([x], r=self.n_neighbors)
-        dist, idx = self.tree.query([x], k=self.n_neighbors)
-        quad_x_idx, quad_y_idx = self.Xi[idx], self.Yi[idx]
-        # print('idx, quad_x_idx, quad_y_idx', idx, quad_x_idx, quad_y_idx)
+        if self.regular:
+            # This is a single point query, so the xmin, xmax are the same.
+            # Same goes for the y coordinate.
+            bbox = [x[0],x[0],x[1],x[1]]
+            dist = None
+            quad_x_idx, quad_y_idx = self.quads_in_bbox_fast(bbox)
+        else:
+            # idx = self.tree.query_radius([x], r=self.n_neighbors)
+            dist, idx = self.tree.query([x], k=self.n_neighbors)
+            quad_x_idx, quad_y_idx = self.Xi[idx], self.Yi[idx]
+            # print('idx, quad_x_idx, quad_y_idx', idx, quad_x_idx, quad_y_idx)
         return dist, quad_x_idx, quad_y_idx
         
     def quads_nearest(self, x):
@@ -187,9 +239,59 @@ class QuadMeshSubset(object):
         # Squeeze a leading dimension of 1 on x/y_idx and therefore on quads
         quads = self.quads[quad_x_idx, quad_y_idx, :, :].squeeze()
         return quads, quad_x_idx.squeeze(), quad_y_idx.squeeze()
+    
+    def quads_in_bbox_fast(self, bbox, pad=2):
+        xlim = bbox[:2]
+        ylim = bbox[2:]
+        # print('bbox is', bbox)
         
+        # We have xmin, xmax, ymin, ymax and want to index the quads array
+        # with the indices that are between the minimum and maximum
+        # goodx = ((xlim[0] <= self.X_edge1d[:-1]) & (xlim[1] >= self.X_edge1d[1:]))
+        # goody = ((ylim[0] <= self.Y_edge1d[:-1]) & (ylim[1] >= self.Y_edge1d[1:]))
+        # idxx, = np.where(goodx)
+        # idxy, = np.where(goody)
+        # When given an edge array, (digitize - 1) will return < 0 for 
+        # values less than the leftmost edge and (n_bins = n_edges-1)
+        # aedge = array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+        # actr = array([ 0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5])
+        # idxx = np.digitize((-1, 0, 0.5, 2.5, 9, 10), aedge, right=True) - 1
+        # valid = (idxx>=0) & (idxx < actr.shape[0])
+        # print(valid) -> [False, False,  True,  True,  True, False]
+        idxx = np.digitize(xlim, self.X_edge1d, right=True) - 1
+        idxy = np.digitize(ylim, self.Y_edge1d, right=True) - 1
+        validx = (idxx >= 0) & (idxx < self.N_X_ctr)
+        validy = (idxy >= 0) & (idxy < self.N_Y_ctr)
+        idxx = idxx[validx]
+        idxy = idxy[validy]
+        # print('indices x', idxx, self.X_edge1d.min(), self.X_edge1d.max())
+        # print('indices y', idxy, self.Y_edge1d.min(), self.Y_edge1d.max())
+        if (len(idxx) > 0) & (len(idxy) > 0):
+            xi_min = max(idxx.min() - pad, 0)
+            xi_max = min(idxx.max() + 1 + pad, self.N_X_ctr)
+            yi_min = max(idxy.min() - pad, 0)
+            yi_max = min(idxy.max() + 1 + pad, self.N_Y_ctr)
+            sl_quad = [0, 0]
+            sl_quad_xi = slice(xi_min, xi_max)
+            sl_quad_yi = slice(yi_min, yi_max)
+            sl_quad[self.X_increasing_dim] = self.Xi1d[sl_quad_xi]
+            sl_quad[self.Y_increasing_dim] = self.Yi1d[sl_quad_yi]
+        else:
+            sl_quad = [self.Xi1d[0:0], self.Yi1d[0:0]]
+        q_shp = np.ones((sl_quad[0].shape[0], sl_quad[1].shape[0]), dtype=int)        
+        vals = ((sl_quad[0][:,None]*q_shp).flatten(), 
+                (sl_quad[1][None,:]*q_shp).flatten())
+        return vals
+
     def quads_in_bbox(self, bbox):
         """ bbox is xmin, xmax, ymin, ymax """
+        if self.regular:
+            # quad_x_idx, y_idx refer to the first and second dimensions
+            # of quads, and may not match X_ctr1d, Y_ctr1d.
+            quad_x_idx, quad_y_idx = self.quads_in_bbox_fast(bbox)
+            quads = self.quads[quad_x_idx, quad_y_idx, :, :]
+            return quads, quad_x_idx, quad_y_idx
+        
         xlim = bbox[:2]
         ylim = bbox[2:]
         # These will miss quads that straddle the edge of the bbox if their
@@ -198,6 +300,7 @@ class QuadMeshSubset(object):
         # goody = (self.Y_ctr >= ylim[0]) & (self.Y_ctr <= ylim[1])
         goodx = np.zeros(self.quads.shape[0:2], dtype=bool)
         goody = np.zeros(self.quads.shape[0:2], dtype=bool)
+
         for qi in range(4):
             # loop over the quad corners, keeping quads with at least one corner in bounds
             goodx |= ((self.quads[:,:,qi,0] >= xlim[0]) &
