@@ -310,7 +310,7 @@ class QuadMeshSubset(object):
         quad_x_idx, quad_y_idx = np.where((goodx & goody))
         quads = self.quads[quad_x_idx, quad_y_idx, :, :]
         return quads, quad_x_idx, quad_y_idx
-        
+
 def clip_polys_by_one_poly(polys, p, scale=True):
     """ polys: a list of polygons
         p: the polygon with which to clip polys
@@ -326,8 +326,6 @@ def clip_polys_by_one_poly(polys, p, scale=True):
             list of values associated with each original poly in polys.
     """
     pc = pyclipper.Pyclipper()
-    open_path = False
-    closed_path = True
 
     if scale:
         polys = scale_to_clipper(polys)
@@ -337,16 +335,16 @@ def clip_polys_by_one_poly(polys, p, scale=True):
     results=[]
     # For any polygon p, zero, one or more than one polygon may be returned
     # for each poly in polys (depending on overlap and the complexity of p).
-    # Keep track of how many were sub-polygons were found for each poly in polys
+    # Keep track of how many sub-polygons were found for each poly in polys
     sub_polys_per_poly=[]
     for q in polys:
-        pc.AddPath(q, pyclipper.PT_SUBJECT, closed_path)
-        pc.AddPath(p, pyclipper.PT_CLIP, closed_path)
+        pc.AddPath(q, pyclipper.PT_SUBJECT, True)
+        pc.AddPath(p, pyclipper.PT_CLIP, True)
         clip_polys = pc.Execute(clip_type=pyclipper.CT_INTERSECTION)
         if scale:
             clip_polys = scale_from_clipper(clip_polys)
         sub_polys_per_poly.append(len(clip_polys))
-        results.extend([cp for cp in clip_polys])
+        results.extend(list(clip_polys))
         pc.Clear()
     return results, sub_polys_per_poly
 
@@ -355,14 +353,12 @@ def join_polys(polys, scale=True):
         of merged polygons
     """
     pc = pyclipper.Pyclipper()
-    open_path = False
-    closed_path = True
 
     if scale:
         polys = scale_to_clipper(polys)
 
     results=[]
-    pc.AddPaths(polys, pyclipper.PT_SUBJECT, closed_path)
+    pc.AddPaths(polys, pyclipper.PT_SUBJECT, True)
     clip_polys = pc.Execute(pyclipper.CT_UNION, pyclipper.PFT_NONZERO, 
         pyclipper.PFT_NONZERO)
     if scale:
@@ -378,7 +374,7 @@ class QuadMeshPolySlicer(object):
         e.g., QuadMeshSubset(xedge, yedge, n_neighbors=12)
         """
         self.mesh = mesh
-        
+    
     def slice(self, polys, bbox=None):
         """ polys is an (N, M, 2) array or N-element list of (M,2) arrays
         of N polygons with M vertices in two dimensions.
@@ -472,8 +468,8 @@ class QuadMeshPolySlicer(object):
         areas = [np.abs(poly_area(p[:,0], p[:,1])) for p in poly_arr]
         poly_ctr = [p.mean(axis=0) for p in poly_arr]
     
-        sub_polys = []
-        for poly, area, pctr in zip(poly_arr, areas, poly_ctr):
+        all_quads = []
+        for poly, pctr in zip(poly_arr, poly_ctr):
             if bbox is not None:
                 if recalc_bbox:
                     mins = np.min(poly, axis=0)
@@ -490,17 +486,11 @@ class QuadMeshPolySlicer(object):
             quad_x_idx.shape = (nq,)
             quad_y_idx.shape = (nq,)
             quads.shape = (nq, 4, 2) # so that we can do "for q in quads"
+            all_quads.append((quads, quad_x_idx, quad_y_idx))
             
-            all_clip_polys, count_per_quad = clip_polys_by_one_poly(quads, poly)
-            clip_x_idx = np.repeat(quad_x_idx, count_per_quad)
-            clip_y_idx = np.repeat(quad_y_idx, count_per_quad)
-            clip_polys = [np.asarray(cp, dtype='f8').squeeze() 
-                          for cp in all_clip_polys]
-            frac_areas = [np.abs(poly_area(p[:,0], p[:,1])/area) for p in clip_polys]
-            total_fraction = np.asarray(frac_areas).sum()*100
-            if (np.abs(total_fraction-100) > 0.1): 
-                print(not_enough_neighbors_err.format(total_fraction))
-            sub_polys.append((clip_polys, frac_areas, (clip_x_idx, clip_y_idx)))
+        sub_poly_args = poly_arr, areas, all_quads
+        sub_poly_args = tuple(zip(poly_arr, areas, all_quads))
+        sub_polys = list(pool.map(make_sub_polys, sub_poly_args))
         return sub_polys, areas
 
     def quad_frac_from_poly_frac_area(self, frac_areas, total_area, 
@@ -515,6 +505,23 @@ class QuadMeshPolySlicer(object):
         quad_areas = self.mesh.quad_areas[quad_x_idx, quad_y_idx]
         quad_frac = sub_quad_areas/quad_areas
         return quad_frac
+
+from concurrent.futures import ProcessPoolExecutor
+pool = ProcessPoolExecutor()
+
+def make_sub_polys(args):
+    poly, area, q_dat = args
+    quads, quad_x_idx, quad_y_idx = q_dat
+    all_clip_polys, count_per_quad = clip_polys_by_one_poly(quads, poly)
+    clip_x_idx = np.repeat(quad_x_idx, count_per_quad)
+    clip_y_idx = np.repeat(quad_y_idx, count_per_quad)
+    clip_polys = [np.asarray(cp, dtype='f8').squeeze() 
+                  for cp in all_clip_polys]
+    frac_areas = [np.abs(poly_area(p[:,0], p[:,1])/area) for p in clip_polys]
+    total_fraction = np.asarray(frac_areas).sum()*100
+    if (np.abs(total_fraction-100) > 0.1):
+        print(not_enough_neighbors_err.format(total_fraction))
+    return (clip_polys, frac_areas, (clip_x_idx, clip_y_idx))
 
 not_enough_neighbors_err = """Polygon only {0} percent covered by quads ...
    ... try increasing n_neighbors."""
