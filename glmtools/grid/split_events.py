@@ -5,11 +5,11 @@ import xarray as xr
 # pool = ProcessPoolExecutor()
 from functools import partial
 
-mean_ax0 = partial(np.mean, axis=0)
 double_array = partial(np.asarray, dtype='f8')
 def gen_sq_mean(sq):
     sqa = double_array(sq)
-    return sqa, mean_ax0(sqa)
+    sqm = np.einsum(sqa, [0,Ellipsis], [Ellipsis]) / float(sqa.shape[0])
+    return sqa, sqm
 
 def gen_split_events(chopped_polys, poly_areas, slicer, event_ids=None):
     """
