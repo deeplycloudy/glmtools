@@ -490,7 +490,7 @@ class QuadMeshPolySlicer(object):
             
         sub_poly_args = poly_arr, areas, all_quads
         sub_poly_args = tuple(zip(poly_arr, areas, all_quads))
-        sub_polys = list(pool.map(make_sub_polys, sub_poly_args))
+        sub_polys = list(pool.map(make_sub_polys, sub_poly_args, chunksize=100))
         return sub_polys, areas
 
     def quad_frac_from_poly_frac_area(self, frac_areas, total_area, 
