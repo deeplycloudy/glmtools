@@ -5,6 +5,12 @@ import xarray as xr
 # pool = ProcessPoolExecutor()
 from functools import partial
 
+mean_ax0 = partial(np.mean, axis=0)
+double_array = partial(np.asarray, dtype='f8')
+def gen_sq_mean(sq):
+    sqa = double_array(sq)
+    return sqa, mean_ax0(sqa)
+
 def gen_split_events(chopped_polys, poly_areas, slicer, event_ids=None):
     """
     chopped_polys is a list of N polygons whose elements contain the sub-polys of each polygon.
@@ -15,21 +21,22 @@ def gen_split_events(chopped_polys, poly_areas, slicer, event_ids=None):
         print("Faking event ids")
         event_ids = range(len(chopped_polys))
     
-    mean_ax0 = partial(np.mean, axis=0)
-    double_array = partial(np.asarray, dtype='f8')
 
     for (subquads, frac_areas, (x_idxs, y_idxs)), total_area, evid in zip(chopped_polys, poly_areas, event_ids):
         quad_fracs = slicer.quad_frac_from_poly_frac_area(
                         frac_areas, total_area, x_idxs, y_idxs)
-        sq_arrays = map(double_array, subquads)
+        # While this runs faster without the call to tuple,
+        # the chained map iterators result in a swiss cheese grid
+        # because the mean consumes an array, leaving it unavailable for
+        # the zip loop below.
+        # sq_arrays = tuple(map(double_array, subquads))
         # About 70% of the runtime of this function is in calculating the
-        # mean positions. When profiled that work is bundled into the 
-        # for loop below. taking tuple(map(...)) first will make apparent
-        # the work for this line.
-        sq_means = map(mean_ax0, sq_arrays)
+        # mean positions.
+        # sq_means = tuple(map(mean_ax0, sq_arrays))
+        sq_means = map(gen_sq_mean, subquads)
 
-        for sq, sq_mean, frac_area, x_idx, y_idx, quad_area in zip(
-                sq_arrays, sq_means, frac_areas, x_idxs, y_idxs, quad_fracs):
+        for (sq, sq_mean), frac_area, x_idx, y_idx, quad_area in zip(
+                sq_means, frac_areas, x_idxs, y_idxs, quad_fracs):
             yield(sq, sq_mean, frac_area, quad_area, (x_idx, y_idx), evid)
 
 def split_event_data(split_polys, poly_areas, slicer, event_ids):
