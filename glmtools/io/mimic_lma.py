@@ -1,5 +1,4 @@
 import numpy as np
-import pandas as pd
 import xarray as xr
 
 from glmtools.io.glm import GLMDataset
@@ -20,7 +19,7 @@ from lmatools.grid.fixed import get_GOESR_coordsys
 # for events, flashes in h5s: # get a stream of events, flashes 
 #     print events.dtype
 #     print flashes.dtype
-        
+
 def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
                  min_events=None, min_groups=None, clip_events=True,
                  fixed_grid=False, nadir_lon=None, 
@@ -261,8 +260,8 @@ def sec_since_basedate(t64, basedate):
     """ given a numpy datetime 64 object, and a datetime basedate, 
         return seconds since basedate"""
     
-    t_series = pd.Series(t64) - basedate
-    t = np.fromiter((dt.total_seconds() for dt in t_series), dtype='float64')
+    t_series = t64 - np.datetime64(basedate)
+    t = np.divide(t_series, np.timedelta64(1, 's'))
     return t
     
 
@@ -409,7 +408,7 @@ def _fake_lma_from_glm_groups(flash_data, basedate,
     flash_np['specific_energy'] = 0.0
     
     return event_np, flash_np
-    
+
 
 def _fake_lma_from_glm_events(flash_data, basedate, 
         split_events=None, split_groups=None, split_flashes=None):
