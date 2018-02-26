@@ -9,9 +9,7 @@ from lmatools.grid.make_grids import FlashGridder
 from lmatools.grid.fixed import get_GOESR_coordsys
 from lmatools.grid.density_to_files import (accumulate_points_on_grid,
     accumulate_points_on_grid_sdev, accumulate_energy_on_grid,
-    accumulate_points_on_grid_3d, accumulate_points_on_grid_sdev_3d,
-    accumulate_energy_on_grid_3d,
-    point_density, extent_density, point_density_3d, extent_density_3d, project,
+    point_density, extent_density, project,
     flashes_to_frames, flash_count_log, extract_events_for_flashes)
 from lmatools.stream.subset import broadcast
 import sys
@@ -42,7 +40,7 @@ class GLMGridder(FlashGridder):
         init_density_grid   = np.zeros(grid_shape, dtype='float32')
         extent_density_grid = np.zeros(grid_shape, dtype='float32')
         footprint_grid      = np.zeros(grid_shape, dtype='float32')
-        flashsize_std_grid  = np.zeros(grid_shape, dtype='float32')
+        # flashsize_std_grid  = np.zeros(grid_shape, dtype='float32')
         
         all_frames = []
         for i in range(n_frames):
@@ -54,9 +52,9 @@ class GLMGridder(FlashGridder):
             accum_footprint      = accumulate_points_on_grid(
                 footprint_grid[:,:,i], xedge, yedge, 
                 label='footprint', grid_frac_weights=True)
-            accum_flashstd       = accumulate_points_on_grid_sdev(
-                flashsize_std_grid[:,:,i], footprint_grid[:,:,i], xedge, yedge, 
-                label='flashsize_std',  grid_frac_weights=True)
+            # accum_flashstd       = accumulate_points_on_grid_sdev(
+            #     flashsize_std_grid[:,:,i], footprint_grid[:,:,i], xedge, yedge,
+            #     label='flashsize_std',  grid_frac_weights=True)
 
             init_density_target   = point_density(accum_init_density)
             extent_density_target = extent_density(x0, y0, dx, dy, 
@@ -65,9 +63,9 @@ class GLMGridder(FlashGridder):
             mean_footprint_target = extent_density(x0, y0, dx, dy, 
                 accum_footprint, weight_key='area',
                 event_grid_area_fraction_key=event_grid_area_fraction_key)
-            std_flashsize_target  = extent_density(x0, y0, dx, dy, 
-                accum_flashstd, weight_key='area',
-                event_grid_area_fraction_key=event_grid_area_fraction_key)
+            # std_flashsize_target  = extent_density(x0, y0, dx, dy,
+            #     accum_flashstd, weight_key='area',
+            #     event_grid_area_fraction_key=event_grid_area_fraction_key)
 
             broadcast_targets = ( 
                 project('init_lon', 'init_lat', 'init_alt', mapProj, geoProj, 
@@ -76,8 +74,8 @@ class GLMGridder(FlashGridder):
                     extent_density_target, use_flashes=False),
                 project('lon', 'lat', 'alt', mapProj, geoProj, 
                     mean_footprint_target, use_flashes=False),
-                project('lon', 'lat', 'alt', mapProj, geoProj, 
-                    std_flashsize_target, use_flashes=False),
+                # project('lon', 'lat', 'alt', mapProj, geoProj,
+                #     std_flashsize_target, use_flashes=False),
                 )
             spew_to_density_types = broadcast( broadcast_targets )
 
@@ -90,7 +88,9 @@ class GLMGridder(FlashGridder):
                      flash_counter=frame_count_log)
 
         outgrids = (init_density_grid, extent_density_grid,
-            footprint_grid, flashsize_std_grid)
+            footprint_grid, 
+            # flashsize_std_grid,
+            )
         return outgrids, framer
 
     def event_pipeline_setup(self):
@@ -153,14 +153,17 @@ class GLMGridder(FlashGridder):
 
         flash_outgrids, flash_framer = self.flash_pipeline_setup()
         (init_density_grid, extent_density_grid, footprint_grid,
-            flashsize_std_grid) = flash_outgrids
+            # flashsize_std_grid
+            ) = flash_outgrids
 
         # From a data structure point of view, there is no difference
         # between the group and flash grids. Later, if there are differnces,
         # just copy the flash_pipeline_setup method and start modifying.
         group_outgrids, group_framer = self.flash_pipeline_setup()
         (group_centroid_density_grid, group_extent_density_grid, 
-            group_footprint_grid, groupsize_std_grid) = group_outgrids
+            group_footprint_grid, 
+            # groupsize_std_grid
+            ) = group_outgrids
 
         event_outgrids, event_framer = self.event_pipeline_setup()
         event_density_grid, total_energy_grid = event_outgrids
@@ -276,7 +279,7 @@ class GLMGridder(FlashGridder):
                      lon_range=lon_bnd, lat_range=lat_bnd,
                      clip_events=clip_events, fixed_grid=fixed_grid,
                      nadir_lon=nadir_lon)
-        
+
 def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
     """ Grid GLM data that has been converted to an LMA-like array format.
         
@@ -350,5 +353,5 @@ def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
         del glm
 
     output = gridder.write_grids(**out_kwargs)
-    return output    
+    return output
 
