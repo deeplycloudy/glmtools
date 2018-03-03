@@ -374,7 +374,7 @@ class QuadMeshPolySlicer(object):
         e.g., QuadMeshSubset(xedge, yedge, n_neighbors=12)
         """
         self.mesh = mesh
-    
+
     def slice(self, polys, bbox=None):
         """ polys is an (N, M, 2) array or N-element list of (M,2) arrays
         of N polygons with M vertices in two dimensions.
@@ -523,7 +523,6 @@ def make_sub_polys(args):
         print(not_enough_neighbors_err.format(total_fraction))
     return (clip_polys, frac_areas, (clip_x_idx, clip_y_idx))
 
-not_enough_neighbors_err = """Polygon only {0} percent covered by quads ...
-   ... try increasing n_neighbors."""
+not_enough_neighbors_err = """Polygon only {0} percent covered by quads"""
         
         
