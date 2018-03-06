@@ -37,6 +37,7 @@ def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
     if ((lon_range is not None) | (lat_range is not None) |
         (min_events is not None) | (min_groups is not None)):
         # only subset if we have to
+        print("Subsetting flashes")
         flash_data = glm.subset_flashes(lon_range=lon_range, lat_range=lat_range,
                         min_events=min_events, min_groups=min_groups)
     else:
