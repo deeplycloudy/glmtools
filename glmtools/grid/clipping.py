@@ -490,7 +490,8 @@ class QuadMeshPolySlicer(object):
             
         sub_poly_args = poly_arr, areas, all_quads
         sub_poly_args = tuple(zip(poly_arr, areas, all_quads))
-        sub_polys = list(pool.map(make_sub_polys, sub_poly_args, chunksize=100))
+        sub_polys = list(map(make_sub_polys, sub_poly_args))
+        # sub_polys = list(pool.map(make_sub_polys, sub_poly_args, chunksize=100))
         # sub_polys = list(run_pool_map(make_sub_polys, sub_poly_args))
         return sub_polys, areas
 
@@ -526,10 +527,10 @@ def make_sub_polys(args):
 not_enough_neighbors_err = """Polygon only {0} percent covered by quads"""
         
 
-from concurrent.futures import ProcessPoolExecutor
-pool = ProcessPoolExecutor()
-def run_pool_map(f,a):
-    return pool.map(f,a,chunksize=100)
-def dummy_work(a):
-    return a
-value = run_pool_map(dummy_work, list(range(10)))
+# from concurrent.futures import ProcessPoolExecutor
+# pool = ProcessPoolExecutor()
+# def run_pool_map(f,a):
+#     return pool.map(f,a,chunksize=100)
+# def dummy_work(a):
+#     return a
+# value = run_pool_map(dummy_work, list(range(10)))

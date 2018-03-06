@@ -2,6 +2,7 @@
 
 """
 import itertools
+from functools import partial
 import numpy as np
 from glmtools.io.mimic_lma import read_flashes
 from glmtools.io.glm import GLMDataset
@@ -261,7 +262,7 @@ class GLMGridder(FlashGridder):
         
     
     def process_flashes(self, glm, lat_bnd=None, lon_bnd=None, 
-                        min_points_per_flash=1, min_groups_per_flash=1,
+                        min_points_per_flash=None, min_groups_per_flash=None,
                         clip_events=False, fixed_grid=False,
                         nadir_lon=None, corner_pickle=None):
         self.min_points_per_flash = min_points_per_flash
@@ -275,8 +276,8 @@ class GLMGridder(FlashGridder):
             self.min_groups_per_flash = 1
         # interpret x_bnd and y_bnd as lon, lat
         read_flashes(glm, self.framer, base_date=self.t_ref, 
-                     min_events=self.min_points_per_flash,
-                     min_groups=self.min_groups_per_flash,
+                     min_events=min_points_per_flash,
+                     min_groups=min_groups_per_flash,
                      lon_range=lon_bnd, lat_range=lat_bnd,
                      clip_events=clip_events, fixed_grid=fixed_grid,
                      nadir_lon=nadir_lon)
@@ -308,7 +309,7 @@ def subdivide_bnd(bnd, delta, s=8):
     s_edges[-1] = bnd[1]
     return s_edges
 
-def subdivided_fixed_grid(kwargs, process_flash_kwargs, s=1,
+def subdivided_fixed_grid(kwargs, process_flash_kwargs, out_kwargs, s=1,
     x_pad = 100*28.0e-6, y_pad = 100*28.0e-6):
     """
 
@@ -327,14 +328,19 @@ def subdivided_fixed_grid(kwargs, process_flash_kwargs, s=1,
 
     x_sub_bnd = subdivide_bnd(kwargs['x_bnd'], kwargs['dx'], s=s)
     y_sub_bnd = subdivide_bnd(kwargs['y_bnd'], kwargs['dy'], s=s)
+    print(x_sub_bnd, y_sub_bnd)
     nadir_lon = process_flash_kwargs['nadir_lon']
     geofixcs, grs80lla = get_GOESR_coordsys(sat_lon_nadir=nadir_lon)
+
 
     for i, j in itertools.product(range(s), range(s)):
         kwargsij = kwargs.copy()
         prockwargsij = process_flash_kwargs.copy()
-        x_bnd_i = x_sub_bnd[i:i+2]
-        y_bnd_j = y_sub_bnd[j:j+2]
+        x_bnd_i = x_sub_bnd[i:i+2].copy()
+        y_bnd_j = y_sub_bnd[j:j+2].copy()
+        # Make a copy of this and use it as target grid specs before
+        # we modify to use as the lon/lat bounding box
+        kwargsij['x_bnd'], kwargsij['y_bnd'] = x_bnd_i.copy(), y_bnd_j.copy()
         x_bnd_i[0] -= x_pad
         x_bnd_i[1] += x_pad
         y_bnd_j[0] -= y_pad
@@ -348,8 +354,23 @@ def subdivided_fixed_grid(kwargs, process_flash_kwargs, s=1,
         # Work around that by setting the left bound to -infinity
         if lon_bnd[0] == np.inf: lon_bnd[0] *= -1
         if lat_bnd[0] == np.inf: lat_bnd[0] *= -1
-        prockwargsij['lon_bnd'], prockwargsij['lat_bnd'] = lon_bnd, lat_bnd
-        yield (i, j), kwargsij, prockwargsij
+        prockwargsij['lon_bnd'], prockwargsij['lat_bnd'] = None, None
+        # prockwargsij['lon_bnd'], prockwargsij['lat_bnd'] = lon_bnd, lat_bnd
+        # This is an instance of the coordinate systems class, and it doesn't
+        # pickle. Recreate on the subprocess later on.
+        # kwargsij['pixel_coords'] = None
+        
+        outfile_prefix_base = out_kwargs['output_filename_prefix']
+        outfile_prefix_base_ij = outfile_prefix_base + '-'
+        outfile_prefix_base_ij += '{0:02d}-{1:02d}'.format(i,j)
+        out_kwargs_ij = out_kwargs.copy()
+        out_kwargs_ij['output_filename_prefix'] = outfile_prefix_base_ij
+        # redefine this function later on the subprocess
+        # out_kwargs_ij['output_writer'] = None
+        
+        print(i,j, x_bnd_i, y_bnd_j, lon_bnd, lat_bnd)
+
+        yield (i, j), kwargsij, prockwargsij, out_kwargs_ij
 
 # @profile
 def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
@@ -364,7 +385,7 @@ def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
     kwargs['do_3d'] = False
     
     # Used only for the fixed grid at the moment
-    subdivide_grid = kwargs.pop('subdivide', 1)
+    subdivide_grid = kwargs.pop('subdivide', 4)
 
     process_flash_kwargs = {}
     for prock in ('min_points_per_flash','min_groups_per_flash',
@@ -385,47 +406,55 @@ def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
     if kwargs['proj_name'] == 'latlong':
         process_flash_kwargs['lon_bnd'] = kwargs['x_bnd']
         process_flash_kwargs['lat_bnd'] = kwargs['y_bnd']
-        subgrids = [((0, 0), kwargs, process_flash_kwargs)]
+        subgrids = [((0, 0), kwargs, process_flash_kwargs, out_kwargs)]
     elif 'fixed_grid' in process_flash_kwargs:
-        subgrids = subdivided_fixed_grid(kwargs, process_flash_kwargs,
-                                         s=subdivide_grid)
+        subgrids = subdivided_fixed_grid(kwargs, process_flash_kwargs, 
+                                         out_kwargs, s=subdivide_grid)
     else:
         # working with ccd pixels or a projection, so no known lat lon bnds
         process_flash_kwargs['lon_bnd'] = None
         process_flash_kwargs['lat_bnd'] = None
-        subgrids = [((0, 0), kwargs, process_flash_kwargs)]
+        subgrids = [((0, 0), kwargs, process_flash_kwargs, out_kwargs)]
 
-    for subgridij, kwargsij, process_flash_kwargs_ij in subgrids:
-        # These should all be independent at this point and could parallelize
-        print ('gridder kwargs for subgrid {0} are'.format(subgridij), kwargsij)
-        gridder = GLMGridder(start_time, end_time, **kwargsij)
+    this_proc_each_grid = partial(proc_each_grid, start_time=start_time,
+        end_time=end_time, GLM_filenames=GLM_filenames)
+    outputs = pool.map(this_proc_each_grid, subgrids)
+    return outputs
+    
+from concurrent.futures import ProcessPoolExecutor
+pool = ProcessPoolExecutor(max_workers=4)
 
-        if 'clip_events' in process_flash_kwargs_ij:
-            xedge,yedge=np.meshgrid(gridder.xedge,gridder.yedge)
-            mesh = QuadMeshSubset(xedge, yedge, n_neighbors=16*10, regular=True)
-            # import pickle
-            # with open('/data/LCFA-production/L1b/mesh_subset.pickle', 'wb') as f:
-                # pickle.dump(mesh, f)
-            process_flash_kwargs_ij['clip_events'] = mesh
-        for filename in GLM_filenames:
-            # Could create a cache of GLM objects by filename here.
-            print("Processing {0}".format(filename))
-            print('process flash kwargs are', process_flash_kwargs_ij)
-            sys.stdout.flush()
-            glm = GLMDataset(filename)
-            # Pre-load the whole dataset, as recommended by the xarray docs.
-            # This saves an absurd amount of time (factor of 80ish) in
-            # grid.split_events.replicate_and_split_events
-            glm.dataset.load()
-            gridder.process_flashes(glm, **process_flash_kwargs_ij)
-            glm.dataset.close()
-            del glm
+# @profile
+def proc_each_grid(subgrid, start_time=None, end_time=None, 
+    GLM_filenames=None):
+    subgridij, kwargsij, process_flash_kwargs_ij, out_kwargs_ij = subgrid
+    
+    print("out kwargs are", out_kwargs_ij)
+        
+    # These should all be independent at this point and can parallelize
+    print ('gridder kwargs for subgrid {0} are'.format(subgridij), kwargsij)
+    gridder = GLMGridder(start_time, end_time, **kwargsij)
 
-        outfile_prefix_base = out_kwargs['output_filename_prefix']
-        outfile_prefix_base_ij = outfile_prefix_base + '-'
-        outfile_prefix_base_ij += '{0:02d}-{1:02d}'.format(*subgridij)
-        out_kwargs_ij = out_kwargs.copy()
-        out_kwargs_ij['output_filename_prefix'] = outfile_prefix_base_ij
-        output = gridder.write_grids(**out_kwargs_ij)
-    return output
+    if 'clip_events' in process_flash_kwargs_ij:
+        xedge,yedge=np.meshgrid(gridder.xedge,gridder.yedge)
+        mesh = QuadMeshSubset(xedge, yedge, n_neighbors=16*10, regular=True)
+        # import pickle
+        # with open('/data/LCFA-production/L1b/mesh_subset.pickle', 'wb') as f:
+            # pickle.dump(mesh, f)
+        process_flash_kwargs_ij['clip_events'] = mesh
+    for filename in GLM_filenames:
+        # Could create a cache of GLM objects by filename here.
+        print("Processing {0}".format(filename))
+        print('process flash kwargs are', process_flash_kwargs_ij)
+        sys.stdout.flush()
+        glm = GLMDataset(filename)
+        # Pre-load the whole dataset, as recommended by the xarray docs.
+        # This saves an absurd amount of time (factor of 80ish) in
+        # grid.split_events.replicate_and_split_events
+        glm.dataset.load()
+        gridder.process_flashes(glm, **process_flash_kwargs_ij)
+        glm.dataset.close()
+        del glm
 
+    # output = gridder.write_grids(**out_kwargs_ij)
+    return subgridij
