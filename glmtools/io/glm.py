@@ -5,6 +5,7 @@ import numpy as np
 import xarray as xr
 
 from glmtools.io.traversal import OneToManyTraversal
+from glmtools.io.lightning_ellipse import ltg_ellps_lon_lat_to_fixed_grid
 
 def parse_glm_filename_time(time_str):
         """ Given an input time string like
@@ -235,34 +236,47 @@ class GLMDataset(OneToManyTraversal):
 
         
     def subset_flashes(self, lon_range=None, lat_range=None, 
+               x_range=None, y_range=None,
                min_events=None, min_groups=None):
         """ Subset the dataset based on longitude, latitude, the minimum
             number of events per flash, and/or the minimum number of groups 
             per flash.
             
-            Applies subsetting only the the flashes, and then retrieves all 
+            Applies subsetting only the the flashes, and then retrieves all
             events and groups that go with those flash ids. 
             
-            If a flash's centroid is within the bounding box by has events that straddle
-            the bounding box edge, all events will still be returned. Same goes for
-            groups. Therefore, the group and event locations are not strictly within 
-            the bounding box.
+            If a flash's centroid is within the bounding box by has events that
+            straddle the bounding box edge, all events will still be returned.
+            Same goes for groups. Therefore, the group and event locations are
+            not strictly within the bounding box.
+
+            If either or both of x_range and y_range are not None, the flash
+            flash lon,lat is converted to fixed grid coords and filtered on
+            that basis in addition to any other filtering.
         """
         good = np.ones(self.dataset.flash_id.shape[0], dtype=bool)
         flash_data = self.dataset
         
+        if (x_range is not None) | (y_range is not None):
+            nadir_lon = flash_data.lon_field_of_view.data
+            flash_x, flash_y = ltg_ellps_lon_lat_to_fixed_grid(
+                flash_data.flash_lon.data, flash_data.flash_lat.data,
+                nadir_lon)
+        if (x_range is not None):
+            good &= ((flash_x < x_range[1]) & (flash_x > x_range[0]))
+        if (y_range is not None):
+            good &= ((flash_y < y_range[1]) & (flash_y > y_range[0]))
         if lon_range is not None:
             good &= ((flash_data.flash_lon < lon_range[1]) & 
                      (flash_data.flash_lon > lon_range[0])).data
         if lat_range is not None:
             good &= ((flash_data.flash_lat < lat_range[1]) & 
                      (flash_data.flash_lat > lat_range[0])).data
-            
         if min_events is not None:
             good &= (flash_data.flash_child_event_count >= min_events).data
         if min_groups is not None:
             good &= (flash_data.flash_child_group_count >= min_groups).data
-                
+
         flash_ids = flash_data.flash_id[good].data
         return self.get_flashes(flash_ids)
     

@@ -261,7 +261,8 @@ class GLMGridder(FlashGridder):
         self.outformats_3d = ('f',) * 8
         
     
-    def process_flashes(self, glm, lat_bnd=None, lon_bnd=None, 
+    def process_flashes(self, glm, lat_bnd=None, lon_bnd=None,
+                        x_bnd=None, y_bnd=None,
                         min_points_per_flash=None, min_groups_per_flash=None,
                         clip_events=False, fixed_grid=False,
                         nadir_lon=None, corner_pickle=None):
@@ -279,6 +280,7 @@ class GLMGridder(FlashGridder):
                      min_events=min_points_per_flash,
                      min_groups=min_groups_per_flash,
                      lon_range=lon_bnd, lat_range=lat_bnd,
+                     x_range=x_bnd, y_range=y_bnd,
                      clip_events=clip_events, fixed_grid=fixed_grid,
                      nadir_lon=nadir_lon)
 
@@ -316,12 +318,11 @@ def subdivided_fixed_grid(kwargs, process_flash_kwargs, out_kwargs, s=1,
     Generator function to turn a single set of keyword arguments to
     grid_GLM_flashes into an s by s block of keyword arguments.
 
-    x_pad and y_pad are padding in fixed grid coordinates used to increase
-    lon_bnd and lat_bnd. Default is the equivalent of 100 km at nadir.
-    When flashes are subset for processing on a target grid, lon_bnd and
-    lat_bnd are used to filter flash centroids. A flash with a centroid near
-    the edge of the target grid may have events within the grid, so we want
-    to capture that flash too.
+    x_pad and y_pad are padding in fixed grid coordinates used to increase the
+    bounding box over which flashes are subset from the data file. A flash with
+    a centroid near the edge of the target grid may have events within the
+    grid, so we want to capture that flash too. Default is the equivalent of
+    100 km at nadir.
 
     Yields (i,j) kwargs_ij, process_flash_kwargs_ij for each i,j subgrid.
     """
@@ -332,43 +333,33 @@ def subdivided_fixed_grid(kwargs, process_flash_kwargs, out_kwargs, s=1,
     nadir_lon = process_flash_kwargs['nadir_lon']
     geofixcs, grs80lla = get_GOESR_coordsys(sat_lon_nadir=nadir_lon)
 
-
     for i, j in itertools.product(range(s), range(s)):
         kwargsij = kwargs.copy()
         prockwargsij = process_flash_kwargs.copy()
         x_bnd_i = x_sub_bnd[i:i+2].copy()
         y_bnd_j = y_sub_bnd[j:j+2].copy()
         # Make a copy of this and use it as target grid specs before
-        # we modify to use as the lon/lat bounding box
+        # we modify to use as the flash selection bounding box
         kwargsij['x_bnd'], kwargsij['y_bnd'] = x_bnd_i.copy(), y_bnd_j.copy()
         x_bnd_i[0] -= x_pad
         x_bnd_i[1] += x_pad
         y_bnd_j[0] -= y_pad
         y_bnd_j[1] += y_pad
-        lon_bnd, lat_bnd, alt_bnd = grs80lla.fromECEF( *geofixcs.toECEF(
-                                        x_bnd_i, y_bnd_j, x_bnd_i*0.0))
-        kwargsij['x_bnd'], kwargsij['y_bnd'] = x_bnd_i, y_bnd_j
-        # Both bounds are inf if the fixed grid location is off the edge of
-        # the earth. Later, when flashes are subset by glm.subset_flashes,
-        # this causes the subset to be empty.
-        # Work around that by setting the left bound to -infinity
-        if lon_bnd[0] == np.inf: lon_bnd[0] *= -1
-        if lat_bnd[0] == np.inf: lat_bnd[0] *= -1
+        # This x_bnd and y_bnd are different from the one above in kwargsij.
+        # They are used to subset the flashes, and therefore have additional
+        # padding.
+        prockwargsij['x_bnd'], prockwargsij['y_bnd'] = x_bnd_i, y_bnd_j
+        # No need to do lon_bnd and lat_bnd because we subset in fixed grid
+        # coordinates instead.
         prockwargsij['lon_bnd'], prockwargsij['lat_bnd'] = None, None
-        # prockwargsij['lon_bnd'], prockwargsij['lat_bnd'] = lon_bnd, lat_bnd
-        # This is an instance of the coordinate systems class, and it doesn't
-        # pickle. Recreate on the subprocess later on.
-        # kwargsij['pixel_coords'] = None
         
         outfile_prefix_base = out_kwargs['output_filename_prefix']
         outfile_prefix_base_ij = outfile_prefix_base + '-'
         outfile_prefix_base_ij += '{0:02d}-{1:02d}'.format(i,j)
         out_kwargs_ij = out_kwargs.copy()
         out_kwargs_ij['output_filename_prefix'] = outfile_prefix_base_ij
-        # redefine this function later on the subprocess
-        # out_kwargs_ij['output_writer'] = None
         
-        print(i,j, x_bnd_i, y_bnd_j, lon_bnd, lat_bnd)
+        print(i,j, x_bnd_i, y_bnd_j)
 
         yield (i, j), kwargsij, prockwargsij, out_kwargs_ij
 

@@ -21,6 +21,7 @@ from lmatools.grid.fixed import get_GOESR_coordsys
 #     print flashes.dtype
 
 def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
+                 x_range=None, y_range=None,
                  min_events=None, min_groups=None, clip_events=True,
                  fixed_grid=False, nadir_lon=None, 
                  corner_pickle='/data/LCFA-production/L1b/G16_corner_lut_fixedgrid.pickle'):
@@ -31,14 +32,19 @@ def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
         
         If target is not None, target is treated as an lmatools coroutine
         data source. Otherwise, return `(events, flashes)`.
+
+        x_range and y_range are coordinates on the ABI fixed grid.
      """
     geofixcs, grs80lla = get_GOESR_coordsys(sat_lon_nadir=nadir_lon)
             
     if ((lon_range is not None) | (lat_range is not None) |
+        (x_range is not None) | (y_range is not None) |
         (min_events is not None) | (min_groups is not None)):
         # only subset if we have to
         print("Subsetting flashes")
-        flash_data = glm.subset_flashes(lon_range=lon_range, lat_range=lat_range,
+        flash_data = glm.subset_flashes(
+                        x_range=x_range, y_range=y_range,
+                        lon_range=lon_range, lat_range=lat_range,
                         min_events=min_events, min_groups=min_groups)
     else:
         flash_data = glm.dataset
