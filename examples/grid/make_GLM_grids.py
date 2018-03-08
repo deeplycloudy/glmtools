@@ -52,6 +52,9 @@ parser.add_argument('--ngroups', metavar='minimum groups per flash', type=int,
 parser.add_argument('--fixed_grid',
                     action='store_true', dest='fixed_grid',
                     help='grid to the geostationary fixed grid')
+parser.add_argument('--subdivide_grid', metavar='sqrt(number of subgrids)',
+                    action='store', dest='subdivide_grid', type=int, default=1,
+                    help='subdivide the grid this many times along each dimension')
 parser.add_argument('--goes_position', default='none',
                     action='store', dest='goes_position',
                     help='one of [east|west|test]. also requires goes_sector.')
@@ -214,10 +217,22 @@ if args.fixed_grid:
             *geofixcs.toECEF(x_ctr, y_ctr, 0.0))
         fixed_grid = geofixcs
         print(x_bnd, y_bnd, dx, dy, nx, ny)
+    else:
+        dx, dy = args.dx, args.dy
+        nadir_lon = -75.0
+        nx,ny = 1000, 1000
+        x_ctr, y_ctr = args.ctr_lon, args.ctr_lat
+        x_bnd = (np.arange(nx, dtype='float') - nx/2.0)*dx + x_ctr + 0.5*dx
+        y_bnd = (np.arange(ny, dtype='float') - ny/2.0)*dy + y_ctr + 0.5*dy
+        x_bnd = np.asarray([x_bnd.min(), x_bnd.max()])
+        y_bnd = np.asarray([y_bnd.min(), y_bnd.max()])
+        geofixcs, grs80lla = get_GOESR_coordsys(sat_lon_nadir=nadir_lon)
+        ctr_lon, ctr_lat, ctr_alt = grs80lla.fromECEF(
+            *geofixcs.toECEF(x_ctr, y_ctr, 0.0))
+        fixed_grid = geofixcs
+        print(x_bnd, y_bnd, dx, dy, nx, ny)
         
-        # Does this work? Almost - the fixed grid is actually a special
-        # projection.
-        output_writer = partial(write_cf_netcdf_fixedgrid, nadir_lon=nadir_lon)
+    output_writer = partial(write_cf_netcdf_fixedgrid, nadir_lon=nadir_lon)
         
         
 if args.is_lma:
@@ -232,7 +247,7 @@ grid_kwargs=dict(proj_name=proj_name,
         dx=dx, dy=dy, frame_interval=frame_interval, x_bnd=x_bnd, y_bnd=y_bnd, 
         ctr_lat=ctr_lat, ctr_lon=ctr_lon, outpath = outpath,
         min_points_per_flash = min_events,
-        output_writer = output_writer,
+        output_writer = output_writer, subdivide=args.subdivide_grid,
         output_filename_prefix=output_filename_prefix, spatial_scale_factor=1.0)
 
 if args.fixed_grid:
@@ -248,4 +263,6 @@ else:
     grid_kwargs['energy_grids'] = ('total_energy',)
 if (proj_name=='pixel_grid') or (proj_name=='geos'):
     grid_kwargs['pixel_coords'] = fixed_grid
+# if args.corner_points:
+    # grid_kwargs['corner_pickle'] = args.corner_points
 gridder(glm_filenames, start_time, end_time, **grid_kwargs)
