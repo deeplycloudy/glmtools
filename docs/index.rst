@@ -92,8 +92,8 @@ of view.
 
 .. code-block:: bash
 
-    python make_GLM_grids.py -o /path/to/output/ --fixed_grid 
-    --goes_position east --goes_sector conus --ctr_lon 0.0 --ctr_lat 0.0      
+    python make_GLM_grids.py -o /path/to/output/ --fixed_grid \
+    --goes_position east --goes_sector conus --ctr_lon 0.0 --ctr_lat 0.0 \
     --dx=10.0 --dy=10.0 --start=2018-01-04T05:37:00 --end=2018-01-04T05:38:00 \
     OR_GLM-L2-LCFA_G16_s20180040537000_e20180040537200_c20180040537226.nc \
     OR_GLM-L2-LCFA_G16_s20180040537200_e20180040537400_c20180040537419.nc \

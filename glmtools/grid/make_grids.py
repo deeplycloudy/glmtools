@@ -376,7 +376,7 @@ def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
     kwargs['do_3d'] = False
     
     # Used only for the fixed grid at the moment
-    subdivide_grid = kwargs.pop('subdivide', 4)
+    subdivide_grid = kwargs.pop('subdivide', 1)
 
     process_flash_kwargs = {}
     for prock in ('min_points_per_flash','min_groups_per_flash',
