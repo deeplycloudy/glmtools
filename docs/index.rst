@@ -6,8 +6,8 @@
 Documentation for glmtools
 ==========================
 
-Installation Requirements
-=========================
+Installation
+============
 
 glmtools requires ``Python >= 3.5``, ``numpy``, ``scipy``, ``netCDF4``, and
 ``xarray >= 0.97``. That version of ``xarray`` is the first to support automatic
@@ -44,10 +44,10 @@ to install that package from source. From some working directory (e.g.,
    cd ../stormdrain
    python setup.py install
    cd ../glmtools
-   pip install -e ./
+   python setup.py install
 
-Recommended Analyses
-====================
+Using glmtools
+==============
 
 Ensure you are in the anaconda environment created earlier
 ----------------------------------------------------------
@@ -81,7 +81,27 @@ subsequent steps.
 Grid the GLM data
 -----------------
 
-The script ``examples/grid/make_GLM_grids.py`` is a command line utility; run with ``--help`` for usage. The same script can be used to grid LMA data on the same grid by adding the ``--lma`` flag. This step requires LMA HDF5 files containing flash-sorted data. This step produces NetCDF grids in regular lat/lon space.
+The script ``examples/grid/make_GLM_grids.py`` is a command line utility; run with ``--help`` for usage. 
+
+For instance, the following command will grid one minute of data (3 GLM files) on the ABI fixed grid in the CONUS sector at 10 km resolution.
+
+Note that these grids will either have gaps or will double-count events along
+GLM pixel borders, because there is no one grid resolution which exactly
+matches the GLM pixel size as it varies with earth distortion over the field
+of view.
+
+.. code-block:: bash
+
+    python make_GLM_grids.py -o /path/to/output/ --fixed_grid 
+    --goes_position east --goes_sector conus --ctr_lon 0.0 --ctr_lat 0.0      
+    --dx=10.0 --dy=10.0 --start=2018-01-04T05:37:00 --end=2018-01-04T05:38:00 \
+    OR_GLM-L2-LCFA_G16_s20180040537000_e20180040537200_c20180040537226.nc \
+    OR_GLM-L2-LCFA_G16_s20180040537200_e20180040537400_c20180040537419.nc \
+    OR_GLM-L2-LCFA_G16_s20180040537400_e20180040538000_c20180040538022.nc \
+
+The same script can be used to grid LMA data on the same grid by adding the
+``--lma`` flag. This step requires LMA HDF5 files containing flash-sorted data.
+
 
 Calculate time series flash rate data 
 ------------------------------------- 
