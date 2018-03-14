@@ -326,6 +326,13 @@ def subdivided_fixed_grid(kwargs, process_flash_kwargs, out_kwargs, s=1,
 
     Yields (i,j) kwargs_ij, process_flash_kwargs_ij for each i,j subgrid.
     """
+    # Convert padding into an integer multiple of dx
+    n_x_pad = int(x_pad/kwargs['dx'])
+    n_y_pad = int(y_pad/kwargs['dy'])
+    x_pad = float(n_x_pad*kwargs['dx'])
+    y_pad = float(n_y_pad*kwargs['dy'])
+    
+    pads = (n_x_pad, n_y_pad, x_pad, y_pad)
 
     x_sub_bnd = subdivide_bnd(kwargs['x_bnd'], kwargs['dx'], s=s)
     y_sub_bnd = subdivide_bnd(kwargs['y_bnd'], kwargs['dy'], s=s)
@@ -339,7 +346,8 @@ def subdivided_fixed_grid(kwargs, process_flash_kwargs, out_kwargs, s=1,
         x_bnd_i = x_sub_bnd[i:i+2].copy()
         y_bnd_j = y_sub_bnd[j:j+2].copy()
         # Make a copy of this and use it as target grid specs before
-        # we modify to use as the flash selection bounding box
+        # we modify to use as the flash selection bounding box.
+        # These abut one other exactly.
         kwargsij['x_bnd'], kwargsij['y_bnd'] = x_bnd_i.copy(), y_bnd_j.copy()
         x_bnd_i[0] -= x_pad
         x_bnd_i[1] += x_pad
@@ -349,6 +357,11 @@ def subdivided_fixed_grid(kwargs, process_flash_kwargs, out_kwargs, s=1,
         # They are used to subset the flashes, and therefore have additional
         # padding.
         prockwargsij['x_bnd'], prockwargsij['y_bnd'] = x_bnd_i, y_bnd_j
+
+        # The line below guarantees overlap across the grids.
+        # The flash selection bouning box and the target grid are the same
+        kwargsij['x_bnd'], kwargsij['y_bnd'] = x_bnd_i, y_bnd_j
+
         # No need to do lon_bnd and lat_bnd because we subset in fixed grid
         # coordinates instead.
         prockwargsij['lon_bnd'], prockwargsij['lat_bnd'] = None, None
@@ -358,10 +371,52 @@ def subdivided_fixed_grid(kwargs, process_flash_kwargs, out_kwargs, s=1,
         outfile_prefix_base_ij += '{0:02d}-{1:02d}'.format(i,j)
         out_kwargs_ij = out_kwargs.copy()
         out_kwargs_ij['output_filename_prefix'] = outfile_prefix_base_ij
-        
-        print(i,j, x_bnd_i, y_bnd_j)
 
-        yield (i, j), kwargsij, prockwargsij, out_kwargs_ij
+        # out_kwargs_ij['output_writer_cache'] = out_kwargs_ij['output_writer']
+        preprocess_out = GridOutputPreprocess(
+            pads=pads, writer=out_kwargs_ij['output_writer'])
+        out_kwargs_ij['preprocess_out'] = preprocess_out
+        out_kwargs_ij['output_writer'] = preprocess_out.capture_write_call
+
+        print(i,j, x_bnd_i, y_bnd_j, pads)
+
+        yield (i, j), kwargsij, prockwargsij, out_kwargs_ij, pads
+
+class GridOutputPreprocess(object):
+    """
+    The capture_write_call method of this class stands in for the call to 
+    output_writer in gridder.write_grids. It's used to trim the grids back to
+    their actual shape, removing the padding added to ensure all flashes are
+    captured on each grid.
+    
+    To actually write the data, call write_all, which uses the writer
+    function passed on initialization.
+    """
+    def __init__(self, pads=None, writer=None):
+        self.writer = writer
+        self.pads = pads
+        self.outargs=[]
+        self.outkwargs=[]
+    def capture_write_call(self, *args, **kwargs):
+        # Use the padding information to trim up the grids
+        print("Trimming grids")
+        n_x_pad, n_y_pad, x_pad, y_pad = self.pads
+        x_coord, y_coord = args[3], args[4]
+        grid = args[9]
+        x_slice, y_slice = slice(n_x_pad, -n_x_pad), slice(n_y_pad, -n_y_pad)
+        args = (*args[:3], x_coord[x_slice], y_coord[y_slice], *args[5:9],
+                grid[x_slice, y_slice], *args[10:])
+                        
+        self.outargs.append(args)
+        self.outkwargs.append(kwargs)
+    def write_all(self):
+        outfiles = []
+        if self.writer:
+            for outargs, outkwargs in zip(self.outargs, self.outkwargs):
+                self.writer(*outargs, **outkwargs)
+                outfiles.append(outargs[0])
+        return outfiles
+
 
 # @profile
 def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
@@ -409,7 +464,14 @@ def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
 
     this_proc_each_grid = partial(proc_each_grid, start_time=start_time,
         end_time=end_time, GLM_filenames=GLM_filenames)
-    outputs = pool.map(this_proc_each_grid, subgrids)
+
+    with pool:
+        # Block until the pool completes (pool is a context manager)
+        outputs = pool.map(this_proc_each_grid, subgrids)
+    # outputs = list(map(this_proc_each_grid, subgrids))
+    for op in outputs:
+        print(outputs)
+
     return outputs
     
 from concurrent.futures import ProcessPoolExecutor
@@ -418,7 +480,10 @@ pool = ProcessPoolExecutor(max_workers=4)
 # @profile
 def proc_each_grid(subgrid, start_time=None, end_time=None, 
     GLM_filenames=None):
-    subgridij, kwargsij, process_flash_kwargs_ij, out_kwargs_ij = subgrid
+    subgridij, kwargsij, process_flash_kwargs_ij, out_kwargs_ij, pads = subgrid
+
+    # Eventually, we want to trim off n_x/y_pad from each side of the grid
+    n_x_pad, n_y_pad, x_pad, y_pad = pads
     
     print("out kwargs are", out_kwargs_ij)
         
@@ -436,7 +501,8 @@ def proc_each_grid(subgrid, start_time=None, end_time=None,
     for filename in GLM_filenames:
         # Could create a cache of GLM objects by filename here.
         print("Processing {0}".format(filename))
-        print('process flash kwargs are', process_flash_kwargs_ij)
+        print('process flash kwargs for {0} are'.format(subgridij),
+            process_flash_kwargs_ij)
         sys.stdout.flush()
         glm = GLMDataset(filename)
         # Pre-load the whole dataset, as recommended by the xarray docs.
@@ -447,5 +513,8 @@ def proc_each_grid(subgrid, start_time=None, end_time=None,
         glm.dataset.close()
         del glm
 
-    # output = gridder.write_grids(**out_kwargs_ij)
-    return subgridij
+    preprocess_out = out_kwargs_ij.pop('preprocess_out')
+    output = gridder.write_grids(**out_kwargs_ij)
+    outfilenames = preprocess_out.write_all()
+
+    return (subgridij, outfilenames) # out_kwargs_ij
