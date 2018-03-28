@@ -538,11 +538,13 @@ class GLMncCollection(LMAh5Collection):
         """
         fname, table_name = self._time_lookup[t0]
         glm = GLMDataset(fname)
-        events, flashes = read_flashes(glm, None, base_date=self.base_date,
-                                       min_events=self.min_points,
-                                       min_groups=self.min_groups,
-                                       lon_range=self.lon_range, 
-                                       lat_range=self.lat_range)
+        fake_lma = read_flashes(glm, None, base_date=self.base_date,
+                                min_events=self.min_points,
+                                min_groups=self.min_groups,
+                                lon_range=self.lon_range, 
+                                lat_range=self.lat_range,
+                                clip_events=False)
+        events, flashes = fake_lma['flash']
         print('data from {0}'.format(fname))
         return events, flashes
         

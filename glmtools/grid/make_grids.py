@@ -403,7 +403,14 @@ class GridOutputPreprocess(object):
         n_x_pad, n_y_pad, x_pad, y_pad = self.pads
         x_coord, y_coord = args[3], args[4]
         grid = args[9]
-        x_slice, y_slice = slice(n_x_pad, -n_x_pad), slice(n_y_pad, -n_y_pad)
+        if n_x_pad == 0:
+            x_slice = slice(None, None)
+        else:
+            x_slice = slice(n_x_pad, -n_x_pad)
+        if n_y_pad == 0:
+            y_slice = slice(None, None)
+        else:
+            y_slice = slice(n_y_pad, -n_y_pad)
         args = (*args[:3], x_coord[x_slice], y_coord[y_slice], *args[5:9],
                 grid[x_slice, y_slice], *args[10:])
                         
@@ -450,9 +457,10 @@ def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
             out_kwargs[outk] = kwargs.pop(outk)
 
     if kwargs['proj_name'] == 'latlong':
+        pads = (0, 0, 0.0, 0.0)
         process_flash_kwargs['lon_bnd'] = kwargs['x_bnd']
         process_flash_kwargs['lat_bnd'] = kwargs['y_bnd']
-        subgrids = [((0, 0), kwargs, process_flash_kwargs, out_kwargs)]
+        subgrids = [((0, 0), kwargs, process_flash_kwargs, out_kwargs, pads)]
     elif 'fixed_grid' in process_flash_kwargs:
         subgrids = subdivided_fixed_grid(kwargs, process_flash_kwargs, 
                                          out_kwargs, s=subdivide_grid)
@@ -460,7 +468,8 @@ def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
         # working with ccd pixels or a projection, so no known lat lon bnds
         process_flash_kwargs['lon_bnd'] = None
         process_flash_kwargs['lat_bnd'] = None
-        subgrids = [((0, 0), kwargs, process_flash_kwargs, out_kwargs)]
+        pads = (0, 0, 0.0, 0.0)
+        subgrids = [((0, 0), kwargs, process_flash_kwargs, out_kwargs, pads)]
 
     this_proc_each_grid = partial(proc_each_grid, start_time=start_time,
         end_time=end_time, GLM_filenames=GLM_filenames)
@@ -513,8 +522,11 @@ def proc_each_grid(subgrid, start_time=None, end_time=None,
         glm.dataset.close()
         del glm
 
-    preprocess_out = out_kwargs_ij.pop('preprocess_out')
-    output = gridder.write_grids(**out_kwargs_ij)
-    outfilenames = preprocess_out.write_all()
+    preprocess_out = out_kwargs_ij.pop('preprocess_out', None)
+    if preprocess_out:
+        output = gridder.write_grids(**out_kwargs_ij)
+        outfilenames = preprocess_out.write_all()
+    else:
+        outfilenames = gridder.write_grids(**out_kwargs_ij)
 
     return (subgridij, outfilenames) # out_kwargs_ij
