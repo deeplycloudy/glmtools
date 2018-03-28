@@ -8,11 +8,10 @@ lassos in json format, as created by the grid analysis GUI notebook that
 operates on the NetCDF flash files."""
 
 path_to_sort_help = """path_to_sort_results is a path to a standard directory
-of flash sorting results produced by lmatools, and which contains gridded flash
-counts and hdf5 flash files on the usual paths:
-    flash_sort_results/
-        grid_files/yyyy/mon/dd/*.nc
-        h5_files/yyyy/mon/dd/*.h5"""
+of flash sorting results produced by lmatools. glmtools will look within this 
+directory for a grid_files directory that has GLM gridded data on the usual 
+yyy/mon/dd/*.nc path.
+"""
 
 outdir_help = """outdir is created in within the figures-length folder
 inside path_to_sort_results. This way multiple runs with different lassos
@@ -20,7 +19,7 @@ on the same dataset are stored together. figures-length is created if it does
 not exist. """
 
 parser = argparse.ArgumentParser(description=parse_desc)
-parser.add_argument(dest='filenames',metavar='filenames', nargs='*')
+parser.add_argument(dest='filenames',metavar='OR_GLM-L2-LCFA*.nc', nargs='*')
 parser.add_argument('-s', dest='path_to_sort_results', action='store',
                     help=path_to_sort_help,)
 parser.add_argument('--stdpath', dest='use_standard_path', action='store_true',
@@ -372,19 +371,49 @@ if do_energy_spectra:
 # =====
 # NetCDF grid processing
 # =====
-field_file = ('flash_extent', 'flash_init', 'source', 'footprint', 'specific_energy', 'flashsize_std','total_energy')
-field_names = ('flash_extent', 'flash_initiation', 'lma_source', 'flash_footprint', 'specific_energy', 'flashsize_std', 'total_energy')
-field_labels = ('Flash coverage (count per pixel)', 'Flash initation (count per pixel)', 'VHF Sources (count per pixel)',
-                'Average area (km^2)', 'Average Energy J/kg' 'Flash size standard deviation (count per pixel)', 'Average Total Energy (J)')
-grid_ranges = ((1, 1000), (1,100), (1, 10000),  (50, 100000), (1,1000), (1e5, 1e8), (1e-15, 1e-10))
-field_ids_to_run = (0, 1, 2, 3, 5, 6)
+field_file = ('flash_extent',
+              'flash_init',
+              'source',
+              'footprint',
+              'flashsize_std',
+              'total_energy',
+              'group_extent',
+              'group_init',
+              'group_area')
+field_names = ('flash_extent_density',
+               'flash_centroid_density',
+               'event_density',
+               'average_flash_area',
+               'standard_deviation_flash_area',
+               'total_energy',
+               'group_extent_density',
+               'group_centroid_density',
+               'average_group_area',
+               )
+field_labels = ('Flash extent density (count per pixel)',
+                'Flash centroid density (count per pixel)',
+                'Event density (count per pixel)',
+                'Average flash area (km^2)',
+                'Standard deviation of flash area (km^2)',
+                'Total radiant energy (J)',
+                'Group extent density (count per pixel)',
+                'Group centroid density (count per pixel)',
+                'Average group area (km^2)',
+                )
+grid_ranges = ((1, 1000), (1,100), (1, 10000), (50, 100000), (50,100000), 
+               (1e-15, 1e-10), (1, 10000), (1,1000), (50, 100000))
+field_ids_to_run = (0, 1, 2, 3, 5, 6, 7, 8)
+    
 
-def plot_lasso_grid_subset(fig,datalog, t,xedge,yedge,data,grid_lassos,field_name,basedate,grid_range, axis_range):
+def plot_lasso_grid_subset(fig,datalog, t,xedge,yedge,data,grid_lassos,field_name,basedate,grid_range, axis_range, slicer=None):
     from scipy.stats import scoreatpercentile
     from matplotlib.cm import get_cmap
     import matplotlib.colors
     cmap = get_cmap('cubehelix')
     norm=matplotlib.colors.LogNorm()
+    
+    ax=fig.add_subplot(111)
+    ax.set_title(str(t))
 
     x = (xedge[1:]+xedge[:-1])/2.0
     y = (yedge[1:]+yedge[:-1])/2.0
@@ -397,30 +426,69 @@ def plot_lasso_grid_subset(fig,datalog, t,xedge,yedge,data,grid_lassos,field_nam
 
     # in these grids, Y moves along the zeroth index, X moves along the first index
 
+    orig_shape = data.shape
     a = np.empty((N,), dtype=[('t','f4'), ('lon', 'f4'), ('lat','f4'), (field_name, data.dtype)])
     a['t'] = (t-basedate).total_seconds() + 1.0 # add a bit of padding to make sure it's within the time window
     a['lat'] = ymesh.flatten()
     a['lon'] = xmesh.flatten()
     a[field_name] = data.flatten()
 
-    nonzero = a[field_name] > 0
-    good = grid_lassos.filter_mask(a)
-    filtered = a[good]
-    nonzero_filtered = a[good & nonzero]
-    # set up an array for use in pcolor
-    masked_nonzero_filtered = a.view(np.ma.MaskedArray)
-    masked_nonzero_filtered.shape = data.shape
-    masked_nonzero_filtered.mask = (good & nonzero)==False
+    if slicer is None:
+        # Mask out grid cells whose centers are within the polygon
+        nonzero = a[field_name] > 0
+        good = grid_lassos.filter_mask(a)
+        filtered = a[good]
+        nonzero_filtered = a[good & nonzero]
+        # set up an array for use in pcolor
+        masked_nonzero_filtered = a.view(np.ma.MaskedArray)
+        masked_nonzero_filtered.shape = data.shape
+        masked_nonzero_filtered.mask = (good & nonzero)==False
+        
+        art = ax.pcolormesh(xedge, yedge,
+                            masked_nonzero_filtered[field_name],
+                            vmin=grid_range[0], vmax=grid_range[1],
+                            cmap=cmap, norm=norm)
+    else:
+        # EXPERIMENTAL, UNTESTED CODE for slicing grid cells within
+        # the polygons instead of masking out by grid cell centers
+        for (t0, t1), lassofilter in grid_lassos.poly_lookup.items():
+            poly = lassofilter.verts
+            in_time = (t >= t0) & (t < t1)
+            time_filtered = a[in_time] 
+            # Find the polygon valid at the time of the data.
+            # There is only one time of data here, and so it will
+            # have nonzero size only if it falls within the valid time
+            # range of a polygon, and will be one full frame for one
+            # polygon valid at that time.
+            if time_filtered.size > 0:
+                time_filtered.shape = orig_shape
+                poly = lassofilter.verts
+                sliced_polys, poly_areas = slicer.slice([poly,])
+                subquads, frac_areas, q_idxs = sliced_polys[0]
+                total_area = poly_areas[0]
+                # Fracional areas of each quad. Will use to weight data.
+                quad_frac = slicer.quad_frac_from_poly_frac_area(frac_areas,
+                    total_area, q_idxs[0], q_idxs[1])
+                
+                # Use the x,y quad indices to subset the data.
+                filtered = time_filtered[q_idxs[0], q_idxs[1]]
+                
+                # weight the data values by the fractional areas of each sub-polygon.
+                filtered[field_data] *= np.asarray(quad_frac, dtype=float)
+                
+                # patch_vals = np.asarray([time_filtered[field_name][*q_idx] for q_idx in zip(*q_idxs)])
+                # patch_vals *= np.asarray(areas, dtype=float)
+                
+                nonzero = (filtered > 0)
+                nonzero_filtered = filtered[nonzero]
 
-    ax=fig.add_subplot(111)
-    ax.set_title(str(t))
-    
-
-    art = ax.pcolormesh(xedge, yedge,
-                        masked_nonzero_filtered[field_name],
-                        vmin=grid_range[0], vmax=grid_range[1],
-                        cmap=cmap, norm=norm)
-
+                from matplotlib.patches import Polygon
+                from matplotlib.collections import PatchCollection
+                patches = [Polygon(p, True) for p in subquads]
+                art = PatchCollection(patches, norm=norm, cmap=cmap,
+                                      vmin=grid_range[0], vmax=grid_range[1])
+                ax.add_collection(art)
+                
     # ax.plot(lon_range,lat_range,'ok--',alpha=0.5)
     art.set_rasterized(True)
     cbar = fig.colorbar(art)
@@ -464,6 +532,10 @@ for field_id in field_ids_to_run:
     fig=plt.figure(figsize=(12,10))
     lon_range, lat_range = polys_to_bounding_box(flashes_in_poly.polys)
     axis_range = lon_range+lat_range
+
+    # UNCOMMENT TO USE EXPERIMENTAL BLOCK ABOVE
+    # mesh = QuadMeshSubset(xedge, yedge, n_neighbors=20)
+    # slicer = QuadMeshPolySlicer(mesh)
 
     for t, xedge, yedge, data in gfc:
         if (t >= t_start) & (t <= t_end):
