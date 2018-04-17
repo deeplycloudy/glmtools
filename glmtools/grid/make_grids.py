@@ -309,7 +309,7 @@ def subdivide_bnd(bnd, delta, s=8):
     # Number of elements
     n = int(w/delta)
     # Numbr of elements in each segment
-    log.debug(n, s)
+    log.debug((n, s))
     dn = int(n/s)
 
     s_edges = np.arange(s+1, dtype='f8')*delta*dn + bnd[0]
@@ -341,7 +341,7 @@ def subdivided_fixed_grid(kwargs, process_flash_kwargs, out_kwargs, s=1,
 
     x_sub_bnd = subdivide_bnd(kwargs['x_bnd'], kwargs['dx'], s=s)
     y_sub_bnd = subdivide_bnd(kwargs['y_bnd'], kwargs['dy'], s=s)
-    log.debug(x_sub_bnd, y_sub_bnd)
+    log.debug((x_sub_bnd, y_sub_bnd))
     nadir_lon = process_flash_kwargs['nadir_lon']
     geofixcs, grs80lla = get_GOESR_coordsys(sat_lon_nadir=nadir_lon)
 
@@ -383,7 +383,7 @@ def subdivided_fixed_grid(kwargs, process_flash_kwargs, out_kwargs, s=1,
         out_kwargs_ij['preprocess_out'] = preprocess_out
         out_kwargs_ij['output_writer'] = preprocess_out.capture_write_call
 
-        log.debug(i,j, x_bnd_i, y_bnd_j, pads)
+        log.debug((i,j, x_bnd_i, y_bnd_j, pads))
 
         yield (i, j), kwargsij, prockwargsij, out_kwargs_ij, pads
 
@@ -501,7 +501,7 @@ def proc_each_grid(subgrid, start_time=None, end_time=None,
     log.info("out kwargs are", out_kwargs_ij)
         
     # These should all be independent at this point and can parallelize
-    log.info('gridder kwargs for subgrid {0} are'.format(subgridij), kwargsij)
+    log.info(('gridder kwargs for subgrid {0} are'.format(subgridij), kwargsij))
     gridder = GLMGridder(start_time, end_time, **kwargsij)
 
     if 'clip_events' in process_flash_kwargs_ij:
@@ -514,8 +514,8 @@ def proc_each_grid(subgrid, start_time=None, end_time=None,
     for filename in GLM_filenames:
         # Could create a cache of GLM objects by filename here.
         log.info("Processing {0}".format(filename))
-        log.info('process flash kwargs for {0} are'.format(subgridij),
-            process_flash_kwargs_ij)
+        log.info(('process flash kwargs for {0} are'.format(subgridij),
+            process_flash_kwargs_ij))
         sys.stdout.flush()
         glm = GLMDataset(filename)
         # Pre-load the whole dataset, as recommended by the xarray docs.
