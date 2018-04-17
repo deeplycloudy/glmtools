@@ -3,6 +3,7 @@
 """
 import itertools
 from functools import partial
+from concurrent.futures import ProcessPoolExecutor
 import numpy as np
 from glmtools.io.mimic_lma import read_flashes
 from glmtools.io.glm import GLMDataset
@@ -474,6 +475,7 @@ def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
     this_proc_each_grid = partial(proc_each_grid, start_time=start_time,
         end_time=end_time, GLM_filenames=GLM_filenames)
 
+    pool = ProcessPoolExecutor(max_workers=4)
     with pool:
         # Block until the pool completes (pool is a context manager)
         outputs = pool.map(this_proc_each_grid, subgrids)
@@ -483,8 +485,6 @@ def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
 
     return outputs
     
-from concurrent.futures import ProcessPoolExecutor
-pool = ProcessPoolExecutor(max_workers=4)
 
 # @profile
 def proc_each_grid(subgrid, start_time=None, end_time=None, 

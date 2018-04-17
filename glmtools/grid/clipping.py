@@ -18,10 +18,11 @@ https://stackoverflow.com/questions/46235176/clipperlib-clip-multiple-squares-wi
 "Paul, the latest version of Clipper (still in development but solid and faster
 and unlikely to change much now before formal release) doesn't have any polygon
 merging so should do what you want ...
-sourceforge.net/p/polyclipping/code/HEAD/tree/sandbox/Clippe‌​r2 .
+sourceforge.net/p/polyclipping/code/HEAD/tree/sandbox/Clipper2.
 Alternatively you could comment out the the JoinCommonEdges() statement in the
 ExecuteInternal method in the old Clipper."
 """
+from concurrent.futures import ProcessPoolExecutor
 
 import numpy as np
 from glmtools.io.ccd import create_pixel_lookup
@@ -490,9 +491,13 @@ class QuadMeshPolySlicer(object):
             
         sub_poly_args = poly_arr, areas, all_quads
         sub_poly_args = tuple(zip(poly_arr, areas, all_quads))
-        sub_polys = list(map(make_sub_polys, sub_poly_args))
-        # sub_polys = list(pool.map(make_sub_polys, sub_poly_args, chunksize=100))
-        # sub_polys = list(run_pool_map(make_sub_polys, sub_poly_args))
+
+        # sub_polys = list(map(make_sub_polys, sub_poly_args))
+        # pool = ProcessPoolExecutor(max_workers=6)
+        # with pool:
+            # sub_polys = list(pool.map(make_sub_polys, sub_poly_args, chunksize=100))
+
+        sub_polys = list(run_pool_map(make_sub_polys, sub_poly_args))
         return sub_polys, areas
 
     def quad_frac_from_poly_frac_area(self, frac_areas, total_area, 
@@ -527,10 +532,10 @@ def make_sub_polys(args):
 not_enough_neighbors_err = """Polygon only {0} percent covered by quads"""
         
 
-# from concurrent.futures import ProcessPoolExecutor
-# pool = ProcessPoolExecutor()
-# def run_pool_map(f,a):
-#     return pool.map(f,a,chunksize=100)
+
+def run_pool_map(f,a):
+    pool = ProcessPoolExecutor(max_workers=4)
+    return pool.map(f,a,chunksize=100)
 # def dummy_work(a):
 #     return a
 # value = run_pool_map(dummy_work, list(range(10)))
