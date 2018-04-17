@@ -5,6 +5,10 @@ import xarray as xr
 # pool = ProcessPoolExecutor()
 from functools import partial
 
+import logging
+log = logging.getLogger(__name__)
+log.addHandler(logging.NullHandler())
+
 double_array = partial(np.asarray, dtype='f8')
 def gen_sq_mean(sq):
     sqa = double_array(sq)
@@ -18,7 +22,7 @@ def gen_split_events(chopped_polys, poly_areas, slicer, event_ids=None):
     event_ids are N corresponding event_ids
     """
     if event_ids is None: 
-        print("Faking event ids")
+        log.debug("Faking event ids")
         event_ids = range(len(chopped_polys))
     
 

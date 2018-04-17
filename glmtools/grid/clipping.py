@@ -24,6 +24,10 @@ ExecuteInternal method in the old Clipper."
 """
 from concurrent.futures import ProcessPoolExecutor
 
+import logging
+log = logging.getLogger(__name__)
+log.addHandler(logging.NullHandler())
+
 import numpy as np
 from glmtools.io.ccd import create_pixel_lookup
 import pyclipper
@@ -136,7 +140,7 @@ class QuadMeshSubset(object):
         self.X_ctr = X_ctr
         self.Y_ctr = Y_ctr
             
-        print('Calculating polygons from mesh ...')
+        log.info('Calculating polygons from mesh ...')
         # all_quad_idx0, all_quad_idx1 = (np.arange(X_ctr.shape[0]),
         #                                            np.arange(X_ctr.shape[1]))
         # quads = [q for q in self.gen_polys(
@@ -148,7 +152,7 @@ class QuadMeshSubset(object):
         
         self.quads = polys_from_quadmesh(xedge, yedge)
         nq = self.quads.shape[0] * self.quads.shape[1]
-        print('    ... {0} quads in mesh ...'.format(nq))
+        log.info('    ... {0} quads in mesh ...'.format(nq))
         self.quads_flat = self.quads.view()
         self.quads_flat.shape = (nq, 4, 2) # flatten the first two dimensions
         self.quad_areas = vectorized_poly_area(self.quads_flat[:, :, 0],
@@ -164,7 +168,7 @@ class QuadMeshSubset(object):
 #         P, G = max_poly_area, min_mesh_size
 ## self.min_neighbors = max(int((np.sqrt(P)/np.sqrt(G)+1)**2), 8)
         if regular:
-            print('    ... determining regular grid arrangement ...')
+            log.debug('    ... determining regular grid arrangement ...')
             # if we have a regular grid, by definition one of the
             # two dimensions has constant values. Depending on how meshgrid
             # was used, that may be along either dimension one or two
@@ -189,13 +193,13 @@ class QuadMeshSubset(object):
             self.Yi1d = np.arange(0, len(self.Y_ctr1d))
             self.N_X_ctr = self.X_ctr1d.shape[0]
             self.N_Y_ctr = self.Y_ctr1d.shape[0]
-            print('    ... done.')
+            log.debug('    ... done.')
         else:
             # We reuse this function that was spec'd in terms of lon/lat, but it's
             # actually general for a quadmesh in any coordinate system.
-            print('    ... constructing search tree ... be patient ...')
+            log.debug('    ... constructing search tree ... be patient ...')
             self.tree, self.Xi, self.Yi = create_pixel_lookup(X_ctr, Y_ctr, leaf_size=16)
-            print('    ... done.')
+            log.debug('    ... done.')
         
         
     # def gen_polys(self, xidx, yidx):
@@ -526,7 +530,7 @@ def make_sub_polys(args):
     frac_areas = [np.abs(poly_area(p[:,0], p[:,1])/area) for p in clip_polys]
     total_fraction = np.asarray(frac_areas).sum()*100
     if (np.abs(total_fraction-100) > 0.1):
-        print(not_enough_neighbors_err.format(total_fraction))
+        log.debug(not_enough_neighbors_err.format(total_fraction))
     return (clip_polys, frac_areas, (clip_x_idx, clip_y_idx))
 
 not_enough_neighbors_err = """Polygon only {0} percent covered by quads"""

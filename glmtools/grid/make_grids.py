@@ -1,6 +1,10 @@
 """ Gridding of GLM data built on lmatools
 
 """
+import logging
+log = logging.getLogger(__name__)
+log.addHandler(logging.NullHandler())
+
 import itertools
 from functools import partial
 from concurrent.futures import ProcessPoolExecutor
@@ -305,7 +309,7 @@ def subdivide_bnd(bnd, delta, s=8):
     # Number of elements
     n = int(w/delta)
     # Numbr of elements in each segment
-    print(n, s)
+    log.debug(n, s)
     dn = int(n/s)
 
     s_edges = np.arange(s+1, dtype='f8')*delta*dn + bnd[0]
@@ -337,7 +341,7 @@ def subdivided_fixed_grid(kwargs, process_flash_kwargs, out_kwargs, s=1,
 
     x_sub_bnd = subdivide_bnd(kwargs['x_bnd'], kwargs['dx'], s=s)
     y_sub_bnd = subdivide_bnd(kwargs['y_bnd'], kwargs['dy'], s=s)
-    print(x_sub_bnd, y_sub_bnd)
+    log.debug(x_sub_bnd, y_sub_bnd)
     nadir_lon = process_flash_kwargs['nadir_lon']
     geofixcs, grs80lla = get_GOESR_coordsys(sat_lon_nadir=nadir_lon)
 
@@ -379,7 +383,7 @@ def subdivided_fixed_grid(kwargs, process_flash_kwargs, out_kwargs, s=1,
         out_kwargs_ij['preprocess_out'] = preprocess_out
         out_kwargs_ij['output_writer'] = preprocess_out.capture_write_call
 
-        print(i,j, x_bnd_i, y_bnd_j, pads)
+        log.debug(i,j, x_bnd_i, y_bnd_j, pads)
 
         yield (i, j), kwargsij, prockwargsij, out_kwargs_ij, pads
 
@@ -400,7 +404,7 @@ class GridOutputPreprocess(object):
         self.outkwargs=[]
     def capture_write_call(self, *args, **kwargs):
         # Use the padding information to trim up the grids
-        print("Trimming grids")
+        log.info("Trimming grids")
         n_x_pad, n_y_pad, x_pad, y_pad = self.pads
         x_coord, y_coord = args[3], args[4]
         grid = args[9]
@@ -481,7 +485,7 @@ def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
         outputs = pool.map(this_proc_each_grid, subgrids)
     # outputs = list(map(this_proc_each_grid, subgrids))
     for op in outputs:
-        print(outputs)
+        log.debug(outputs)
 
     return outputs
     
@@ -494,10 +498,10 @@ def proc_each_grid(subgrid, start_time=None, end_time=None,
     # Eventually, we want to trim off n_x/y_pad from each side of the grid
     n_x_pad, n_y_pad, x_pad, y_pad = pads
     
-    print("out kwargs are", out_kwargs_ij)
+    log.info("out kwargs are", out_kwargs_ij)
         
     # These should all be independent at this point and can parallelize
-    print ('gridder kwargs for subgrid {0} are'.format(subgridij), kwargsij)
+    log.info('gridder kwargs for subgrid {0} are'.format(subgridij), kwargsij)
     gridder = GLMGridder(start_time, end_time, **kwargsij)
 
     if 'clip_events' in process_flash_kwargs_ij:
@@ -509,8 +513,8 @@ def proc_each_grid(subgrid, start_time=None, end_time=None,
         process_flash_kwargs_ij['clip_events'] = mesh
     for filename in GLM_filenames:
         # Could create a cache of GLM objects by filename here.
-        print("Processing {0}".format(filename))
-        print('process flash kwargs for {0} are'.format(subgridij),
+        log.info("Processing {0}".format(filename))
+        log.info('process flash kwargs for {0} are'.format(subgridij),
             process_flash_kwargs_ij)
         sys.stdout.flush()
         glm = GLMDataset(filename)

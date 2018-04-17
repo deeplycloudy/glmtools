@@ -1,6 +1,10 @@
 import numpy as np
 import xarray as xr
 
+import logging
+log = logging.getLogger(__name__)
+log.addHandler(logging.NullHandler())
+
 from glmtools.io.glm import GLMDataset
 from glmtools.grid.split_events import split_event_data, split_event_dataset_from_props, split_group_dataset_from_props, split_flash_dataset_from_props, replicate_and_weight_split_child_dataset
 from glmtools.grid.clipping import QuadMeshPolySlicer, join_polys
@@ -41,7 +45,7 @@ def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
         (x_range is not None) | (y_range is not None) |
         (min_events is not None) | (min_groups is not None)):
         # only subset if we have to
-        print("Subsetting flashes")
+        log.info("Subsetting flashes")
         flash_data = glm.subset_flashes(
                         x_range=x_range, y_range=y_range,
                         lon_range=lon_range, lat_range=lat_range,
@@ -101,9 +105,9 @@ def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
 
         slicer = QuadMeshPolySlicer(mesh)
         # --- Split up the events ---
-        print("Starting to split events")
+        log.info("Starting to split events")
         chopped_polys, poly_areas = slicer.slice(event_polys)
-        print("Sliced all events")
+        log.info("Sliced all events")
         split_event_polys, split_event_properties = split_event_data(chopped_polys, poly_areas, slicer, event_ids=event_ids)
         if fixed_grid:
             # Use variable names that indicate the fixed grid polygon centroid
@@ -127,11 +131,11 @@ def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
             split_event_dataset['split_event_lat'] = (split_dims, split_event_lat)
         else:
             split_event_dataset = split_event_dataset_from_props(split_event_properties)
-        print("Calculated split event properties")
+        log.info("Calculated split event properties")
         split_event_dataset = replicate_and_weight_split_child_dataset(glm, split_event_dataset)
-        print("Finished replicated event dataset")
+        log.info("Finished replicated event dataset")
         # --- Now split the groups ---
-        print("Starting to split groups")
+        log.info("Starting to split groups")
         unique_gr_ids = np.unique(event_parent_group_ids)
         poly_index = dict(((k,[]) for k in unique_gr_ids))
         for split_poly, group_id in zip(event_polys_inflated, event_parent_group_ids):
@@ -145,7 +149,7 @@ def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
             union_group_ids.extend([gr_id,]*len(gr_join_poly))
 
         chopped_union_polys, poly_union_areas = slicer.slice(union_polys, bbox=True)    
-        print("Sliced all groups")
+        log.info("Sliced all groups")
         split_group_polys, split_group_properties = split_event_data(chopped_union_polys, 
             poly_union_areas, slicer, event_ids=union_group_ids)
         if fixed_grid:
@@ -171,15 +175,15 @@ def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
         else:
             split_group_dataset = split_group_dataset_from_props(
                 split_group_properties)              
-        print("Calculated split group properties")
+        log.info("Calculated split group properties")
         split_group_dataset = replicate_and_weight_split_child_dataset(glm, split_group_dataset,        
             parent_id='group_id', split_child_parent_id='split_group_parent_group_id',
             names=['group_time_offset', 'group_area', 'group_energy'],
             weights={'group_energy':'split_group_area_fraction',
                      'group_area':'split_group_area_fraction'})
-        print("Finished replicated group dataset")        
+        log.info("Finished replicated group dataset")        
         # --- Now split the flashes ---
-        print("Starting to split flashes")
+        log.info("Starting to split flashes")
         unique_fl_ids = np.unique(event_parent_flash_ids)
         poly_index = dict(((k,[]) for k in unique_fl_ids))
         for split_poly, flash_id in zip(event_polys_inflated, event_parent_flash_ids):
@@ -194,7 +198,7 @@ def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
         # all_flash_sub_polys = [p for p in itertools.chain.from_iterable(poly_index.values())]
 
         chopped_union_polys, poly_union_areas = slicer.slice(union_polys, bbox=True)
-        print("Sliced all flashes") 
+        log.info("Sliced all flashes") 
         split_flash_polys, split_flash_properties = split_event_data(chopped_union_polys, 
             poly_union_areas, slicer, event_ids=union_flash_ids)
         if fixed_grid:
@@ -220,14 +224,14 @@ def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
         else:
             split_flash_dataset = split_flash_dataset_from_props(
                 split_flash_properties)              
-        print("Calculated split flash properties")
+        log.info("Calculated split flash properties")
         split_flash_dataset = replicate_and_weight_split_child_dataset(glm, split_flash_dataset,        
             parent_id='flash_id', split_child_parent_id='split_flash_parent_flash_id',
             names=['flash_time_offset_of_first_event', 'flash_time_offset_of_last_event',
                    'flash_area', 'flash_energy'],
             weights={'flash_energy':'split_flash_area_fraction',
                      'flash_area':'split_flash_area_fraction'})
-        print("Finished replicated flash dataset")        
+        log.info("Finished replicated flash dataset")        
         
     try:
         fake_lma = mimic_lma_dataset(flash_data, base_date,
@@ -260,7 +264,7 @@ def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
             return fake_lma
     except KeyError as ke:
         err_txt = 'Skipping {0}\n    ... assuming a flash, group, or event with id {1} does not exist'
-        print(err_txt.format(glm.dataset.dataset_name, ke))
+        log.error(err_txt.format(glm.dataset.dataset_name, ke))
 
 
 def sec_since_basedate(t64, basedate):
@@ -545,7 +549,7 @@ class GLMncCollection(LMAh5Collection):
                                 lat_range=self.lat_range,
                                 clip_events=False)
         events, flashes = fake_lma['flash']
-        print('data from {0}'.format(fname))
+        log.info('data from {0}'.format(fname))
         return events, flashes
         
 class TimeSeriesGLMFlashSubset(TimeSeriesGenericFlashSubset):
