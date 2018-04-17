@@ -1,4 +1,3 @@
-
 import argparse
 parse_desc = """Grid GLM flash data. The start and end times can be specified
 independently, or if not provided they will be inferred from the filenames.
@@ -85,6 +84,13 @@ from datetime import datetime
 import os
 from functools import partial
 
+import logging
+logging.basicConfig(filename="make_GLM_grid.log",
+                    format='%(levelname)s %(asctime)s %(message)s',
+                    datefmt='%m/%d/%Y %I:%M:%S %p', level=logging.DEBUG)
+log = logging.getLogger(__name__)
+log.info("Starting GLM Gridding")
+
 from lmatools.grid.make_grids import write_cf_netcdf_latlon, write_cf_netcdf_noproj, write_cf_netcdf_fixedgrid
 from lmatools.grid.make_grids import dlonlat_at_grid_center, grid_h5flashfiles
 from glmtools.grid.make_grids import grid_GLM_flashes
@@ -118,8 +124,8 @@ try:
     filename_starts = [info[start_idx] for info in filename_infos]
     filename_ends = [info[end_idx] for info in filename_infos]
 except ValueError:
-    print("One or more GLM files has a non-standard filename.")
-    print("    Assuming that --start and --end have been passed directly.")
+    log.error("One or more GLM files has a non-standard filename.")
+    log.error("    Assuming that --start and --end have been passed directly.")
     
 from glmtools.io.glm import parse_glm_filename
 if args.start is not None:
@@ -216,7 +222,7 @@ if args.fixed_grid:
         ctr_lon, ctr_lat, ctr_alt = grs80lla.fromECEF(
             *geofixcs.toECEF(x_ctr, y_ctr, 0.0))
         fixed_grid = geofixcs
-        print(x_bnd, y_bnd, dx, dy, nx, ny)
+        log.debug((x_bnd, y_bnd, dx, dy, nx, ny))
     else:
         dx, dy = args.dx, args.dy
         nadir_lon = -75.0
@@ -230,7 +236,7 @@ if args.fixed_grid:
         ctr_lon, ctr_lat, ctr_alt = grs80lla.fromECEF(
             *geofixcs.toECEF(x_ctr, y_ctr, 0.0))
         fixed_grid = geofixcs
-        print(x_bnd, y_bnd, dx, dy, nx, ny)
+        log.debug((x_bnd, y_bnd, dx, dy, nx, ny))
         
     output_writer = partial(write_cf_netcdf_fixedgrid, nadir_lon=nadir_lon)
         
@@ -265,4 +271,7 @@ if (proj_name=='pixel_grid') or (proj_name=='geos'):
     grid_kwargs['pixel_coords'] = fixed_grid
 # if args.corner_points:
     # grid_kwargs['corner_pickle'] = args.corner_points
-gridder(glm_filenames, start_time, end_time, **grid_kwargs)
+if __name__ == '__main__':
+    from multiprocessing import freeze_support
+    freeze_support()
+    gridder(glm_filenames, start_time, end_time, **grid_kwargs)
