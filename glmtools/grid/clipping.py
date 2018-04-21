@@ -23,11 +23,15 @@ Alternatively you could comment out the the JoinCommonEdges() statement in the
 ExecuteInternal method in the old Clipper."
 """
 from concurrent.futures import ProcessPoolExecutor
+# max_tasks_per_child helps manage runaway memory?
+# https://stackoverflow.com/questions/21485319/high-memory-usage-using-python-multiprocessing/21613370#21613370
 
 import logging
 log = logging.getLogger(__name__)
 log.addHandler(logging.NullHandler())
 
+import itertools
+from functools import partial
 import numpy as np
 from glmtools.io.ccd import create_pixel_lookup
 import pyclipper
@@ -244,7 +248,7 @@ class QuadMeshSubset(object):
         # Squeeze a leading dimension of 1 on x/y_idx and therefore on quads
         quads = self.quads[quad_x_idx, quad_y_idx, :, :].squeeze()
         return quads, quad_x_idx.squeeze(), quad_y_idx.squeeze()
-    
+
     def quads_in_bbox_fast(self, bbox, pad=2):
         xlim = bbox[:2]
         ylim = bbox[2:]
@@ -316,6 +320,20 @@ class QuadMeshSubset(object):
         quads = self.quads[quad_x_idx, quad_y_idx, :, :]
         return quads, quad_x_idx, quad_y_idx
 
+def clip_poly_pair(pc, p, q):
+    """"
+    pc: an instance of pyclipper.Pyclipper. 
+    p:  the polygon by which to clip other polygon q. 
+
+    pc and p may be held fixed through use of functools.partial so that 
+    multiple q may be clipped by p.
+    """
+    pc.Clear()
+    pc.AddPath(q, pyclipper.PT_SUBJECT, True)
+    pc.AddPath(p, pyclipper.PT_CLIP, True)
+    clip_polys = pc.Execute(clip_type=pyclipper.CT_INTERSECTION)
+    return clip_polys
+
 def clip_polys_by_one_poly(polys, p, scale=True):
     """ polys: a list of polygons
         p: the polygon with which to clip polys
@@ -335,22 +353,27 @@ def clip_polys_by_one_poly(polys, p, scale=True):
     if scale:
         polys = scale_to_clipper(polys)
         p = scale_to_clipper(p)
+        # Changing from the above to the below seems to move most of
+        # time consumption to within the AddPath calls, i.e., it's not
+        # the float->int that is expensive, but rather the type conversion
+        # from Python.
+        # scale_fact = 2 ** 31
+        # polys = (polys * scale_fact).astype('int64')
+        # p = (p*scale_fact).astype('int64')
 
     # Each individual sub-poly is stored here.
-    results=[]
     # For any polygon p, zero, one or more than one polygon may be returned
     # for each poly in polys (depending on overlap and the complexity of p).
     # Keep track of how many sub-polygons were found for each poly in polys
-    sub_polys_per_poly=[]
-    for q in polys:
-        pc.AddPath(q, pyclipper.PT_SUBJECT, True)
-        pc.AddPath(p, pyclipper.PT_CLIP, True)
-        clip_polys = pc.Execute(clip_type=pyclipper.CT_INTERSECTION)
-        if scale:
-            clip_polys = scale_from_clipper(clip_polys)
-        sub_polys_per_poly.append(len(clip_polys))
-        results.extend(list(clip_polys))
-        pc.Clear()
+    cpp = partial(clip_poly_pair, pc, p)
+    all_clip_polys = map(cpp, polys)
+    if scale:
+        sfc = scale_from_clipper #partial(scale_from_clipper, scale=scale_fact)
+        all_clip_polys = map(sfc, all_clip_polys)
+    all_clip_polys = list(map(list, all_clip_polys))
+    sub_polys_per_poly = list(map(len, all_clip_polys))
+    results = list(itertools.chain.from_iterable(all_clip_polys))
+
     return results, sub_polys_per_poly
 
 def join_polys(polys, scale=True):
