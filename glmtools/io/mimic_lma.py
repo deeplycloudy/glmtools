@@ -5,6 +5,9 @@ import logging
 log = logging.getLogger(__name__)
 log.addHandler(logging.NullHandler())
 
+# from concurrent.futures import ProcessPoolExecutor
+from functools import partial
+
 from glmtools.io.glm import GLMDataset
 from glmtools.grid.split_events import split_event_data, split_event_dataset_from_props, split_group_dataset_from_props, split_flash_dataset_from_props, replicate_and_weight_split_child_dataset
 from glmtools.grid.clipping import QuadMeshPolySlicer, join_polys
@@ -27,7 +30,7 @@ from lmatools.grid.fixed import get_GOESR_coordsys
 def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
                  x_range=None, y_range=None,
                  min_events=None, min_groups=None, clip_events=True,
-                 fixed_grid=False, nadir_lon=None, 
+                 fixed_grid=False, nadir_lon=None, chunk_size=100,
                  corner_pickle='/data/LCFA-production/L1b/G16_corner_lut_fixedgrid.pickle'):
     """ This routine is the data pipeline source, responsible for pushing out 
         events and flashes. Using a different flash data source format is a 
@@ -39,7 +42,6 @@ def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
 
         x_range and y_range are coordinates on the ABI fixed grid.
      """
-    geofixcs, grs80lla = get_GOESR_coordsys(sat_lon_nadir=nadir_lon)
             
     if ((lon_range is not None) | (lat_range is not None) |
         (x_range is not None) | (y_range is not None) |
@@ -52,6 +54,34 @@ def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
                         min_events=min_events, min_groups=min_groups)
     else:
         flash_data = glm.dataset
+
+    flash_ids = flash_data.flash_id.data[:]
+    n_chunks = int(flash_ids.shape[0]/chunk_size)
+    flash_chunks = []
+    for ichunk, id_chunk in enumerate(np.array_split(flash_ids, n_chunks)):
+        log.info("Grabbing chunk {0} of {2} for file {1}".format(ichunk+1, glm._filename, n_chunks))
+        flash_chunks.append(glm.get_flashes(id_chunk))
+
+    chunk_func = partial(read_flash_chunk, glm=glm, target=target, base_date=base_date, 
+                         nadir_lon=nadir_lon, fixed_grid=fixed_grid, 
+                         clip_events=clip_events,
+                         corner_pickle=corner_pickle)
+                         
+    # # This doesn't work because we can't pickle the targets - they're generators
+    # pool = ProcessPoolExecutor(max_workers=4)
+    # with pool:
+    #     # Block until the pool completes (pool is a context manager)
+    #     results = list(pool.map(chunk_func, flash_chunks))
+    
+    results = list(map(chunk_func,flash_chunks))
+        
+    return results
+
+
+def read_flash_chunk(flash_data, glm=None, target=None, base_date=None, nadir_lon=None, 
+         fixed_grid=False, clip_events=True, corner_pickle=None):
+    geofixcs, grs80lla = get_GOESR_coordsys(sat_lon_nadir=nadir_lon)
+
     split_event_dataset=None
     split_group_dataset=None
     split_flash_dataset=None
