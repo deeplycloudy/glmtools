@@ -6,7 +6,7 @@ log = logging.getLogger(__name__)
 log.addHandler(logging.NullHandler())
 
 # from concurrent.futures import ProcessPoolExecutor
-# from functools import partial
+from functools import partial
 
 from glmtools.io.glm import GLMDataset
 from glmtools.grid.split_events import split_event_data, split_event_dataset_from_props, split_group_dataset_from_props, split_flash_dataset_from_props, replicate_and_weight_split_child_dataset
