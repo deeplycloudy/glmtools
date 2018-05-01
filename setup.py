@@ -10,4 +10,5 @@ setup(
     url='https://github.com/deeplycloudy/glmtools/',
     license='BSD-3-Clause',
     long_description=open('README.md').read(),
+    include_package_data=True,
 )
