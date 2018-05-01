@@ -1,6 +1,8 @@
 import numpy as np
 import xarray as xr
 
+import pkg_resources
+
 import logging
 log = logging.getLogger(__name__)
 log.addHandler(logging.NullHandler())
@@ -31,7 +33,7 @@ def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
                  x_range=None, y_range=None,
                  min_events=None, min_groups=None, clip_events=True,
                  fixed_grid=False, nadir_lon=None, chunk_size=100,
-                 corner_pickle='/data/LCFA-production/L1b/G16_corner_lut_fixedgrid.pickle'):
+                 corner_pickle=None):
     """ This routine is the data pipeline source, responsible for pushing out 
         events and flashes. Using a different flash data source format is a 
         matter of replacing this routine to read in the necessary event 
@@ -42,7 +44,11 @@ def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
 
         x_range and y_range are coordinates on the ABI fixed grid.
      """
-            
+    if corner_pickle is None:
+        resource_package = __name__  # Could be any module/package name
+        resource_path = '/'.join(('G16_corner_lut_fixedgrid.pickle',))
+        corner_pickle = pkg_resources.resource_filename(resource_package, resource_path)
+        # print(corner_pickle)
     if ((lon_range is not None) | (lat_range is not None) |
         (x_range is not None) | (y_range is not None) |
         (min_events is not None) | (min_groups is not None)):
@@ -56,7 +62,7 @@ def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
         flash_data = glm.dataset
 
     flash_ids = flash_data.flash_id.data[:]
-    n_chunks = int(flash_ids.shape[0]/chunk_size)
+    n_chunks = max(int(flash_ids.shape[0]/chunk_size),1)
     flash_chunks = []
     for ichunk, id_chunk in enumerate(np.array_split(flash_ids, n_chunks)):
         log.info("Grabbing chunk {0} of {2} for file {1}".format(ichunk+1, glm._filename, n_chunks))
