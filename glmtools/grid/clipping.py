@@ -166,6 +166,8 @@ class QuadMeshSubset(object):
             # dtype='f8', count=nq))
         self.quad_areas.shape = self.X_ctr.shape
         
+        self.quads_in_bbox_fast = self._quads_in_bbox_fast
+
         # if min_mesh_size is None:
 #             min_mesh_size = self.quad_areas.min()
 #         print("Min mesh size is", min_mesh_size, " and max poly area is ", max_poly_area)
@@ -249,7 +251,37 @@ class QuadMeshSubset(object):
         quads = self.quads[quad_x_idx, quad_y_idx, :, :].squeeze()
         return quads, quad_x_idx.squeeze(), quad_y_idx.squeeze()
 
-    def quads_in_bbox_fast(self, bbox, pad=2):
+    def _quads_in_bbox_regular(self, bbox, pad=2):
+        """ Assume a perfectly regular grid, with uniform spacing in x and y
+            and increasing xedge and yedge. bbox should be min, max, min, max
+            for x and y respectively.
+            
+            NOTE: This function is incomplete and untested.
+        """
+        xlim = bbox[:2]
+        ylim = bbox[2:]
+        dx = self.X_ctr1d[1] - self.X_ctr1d[0]
+        dy = self.Y_ctr1d[1] - self.Y_ctr1d[0]
+        xi = np.floor( (xlim-self.X_ctr1d[0])/dx ).astype('int32')
+        yi = np.floor( (ylim-self.Y_ctr1d[0])/dy ).astype('int32')
+        pads = np.asarray((-pad, pad), dtype='int32')
+        xi += pads
+        yi += pads
+        xi[xi<0] = 0
+        yi[yi<0] = 0
+        xi[xi>self.N_X_ctr+1] = self.N_X_ctr+1
+        yi[yi>self.N_Y_ctr+1] = self.N_Y_ctr+1
+        sl_quad = [0, 0]
+        sl_quad_xi = slice(xi[0], xi[1])
+        sl_quad_yi = slice(yi[0], yi[1])
+        sl_quad[self.X_increasing_dim] = self.Xi1d[sl_quad_xi]
+        sl_quad[self.Y_increasing_dim] = self.Yi1d[sl_quad_yi]
+        q_shp = np.ones((sl_quad[0].shape[0], sl_quad[1].shape[0]), dtype=int)
+        vals = ((sl_quad[0][:,None]*q_shp).flatten(),
+                (sl_quad[1][None,:]*q_shp).flatten())
+        return vals
+
+    def _quads_in_bbox_fast(self, bbox, pad=2):
         xlim = bbox[:2]
         ylim = bbox[2:]
         # print('bbox is', bbox)
@@ -522,7 +554,8 @@ class QuadMeshPolySlicer(object):
         # sub_polys = list(map(make_sub_polys, sub_poly_args))
         # pool = ProcessPoolExecutor(max_workers=6)
         # with pool:
-            # sub_polys = list(pool.map(make_sub_polys, sub_poly_args, chunksize=100))
+        #     sub_polys = list(pool.map(make_sub_polys, sub_poly_args, chunksize=100))
+
 
         sub_polys = list(run_pool_map(make_sub_polys, sub_poly_args))
         return sub_polys, areas
@@ -542,13 +575,14 @@ class QuadMeshPolySlicer(object):
 
 
 
+
 def make_sub_polys(args):
     poly, area, q_dat = args
     quads, quad_x_idx, quad_y_idx = q_dat
     all_clip_polys, count_per_quad = clip_polys_by_one_poly(quads, poly)
     clip_x_idx = np.repeat(quad_x_idx, count_per_quad)
     clip_y_idx = np.repeat(quad_y_idx, count_per_quad)
-    clip_polys = [np.asarray(cp, dtype='f8').squeeze() 
+    clip_polys = [np.asarray(cp, dtype='f8').squeeze()
                   for cp in all_clip_polys]
     frac_areas = [np.abs(poly_area(p[:,0], p[:,1])/area) for p in clip_polys]
     total_fraction = np.asarray(frac_areas).sum()*100
@@ -557,7 +591,8 @@ def make_sub_polys(args):
     return (clip_polys, frac_areas, (clip_x_idx, clip_y_idx))
 
 not_enough_neighbors_err = """Polygon only {0} percent covered by quads"""
-        
+
+
 
 
 def run_pool_map(f,a):

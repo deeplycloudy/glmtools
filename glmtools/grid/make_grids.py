@@ -1,6 +1,7 @@
 """ Gridding of GLM data built on lmatools
 
 """
+
 import logging
 log = logging.getLogger(__name__)
 log.addHandler(logging.NullHandler())
@@ -383,7 +384,7 @@ def subdivided_fixed_grid(kwargs, process_flash_kwargs, out_kwargs, s=1,
         out_kwargs_ij['preprocess_out'] = preprocess_out
         out_kwargs_ij['output_writer'] = preprocess_out.capture_write_call
 
-        log.debug((i,j, x_bnd_i, y_bnd_j, pads))
+        log.debug(("SUBGRID", i,j, x_bnd_i, y_bnd_j, pads))
 
         yield (i, j), kwargsij, prockwargsij, out_kwargs_ij, pads
 
@@ -488,7 +489,7 @@ def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
         log.debug(outputs)
 
     return outputs
-    
+
 
 # @profile
 def proc_each_grid(subgrid, start_time=None, end_time=None, 
@@ -511,6 +512,8 @@ def proc_each_grid(subgrid, start_time=None, end_time=None,
         # with open('/data/LCFA-production/L1b/mesh_subset.pickle', 'wb') as f:
             # pickle.dump(mesh, f)
         process_flash_kwargs_ij['clip_events'] = mesh
+        log.debug(("XEDGE", subgridij, xedge))
+        log.debug(("YEDGE", subgridij, yedge))
     for filename in GLM_filenames:
         # Could create a cache of GLM objects by filename here.
         log.info("Processing {0}".format(filename))
