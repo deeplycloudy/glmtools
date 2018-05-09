@@ -1,1 +1,2 @@
 include glmtools/io/G16_corner_lut_fixedgrid.pickle
+include glmtools/test/data/FGE_split_merge_GLM.nc
