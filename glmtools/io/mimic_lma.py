@@ -38,11 +38,34 @@ def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
         events and flashes. Using a different flash data source format is a 
         matter of replacing this routine to read in the necessary event 
         and flash data.
-        
-        If target is not None, target is treated as an lmatools coroutine
-        data source. Otherwise, return `(events, flashes)`.
+                 
+        Arguments:
+        glm -- a glmtools.io.glm.GLMDataset instance
+        target -- dictionary, with keys 'flash', 'group', and 'event' pointing to the 
+            pipeline inlet for each, to which (child, parent) arrays are sent for each.
+            If None, return a dictionary with the keys above, and values (child, parent)
+            for each.            
 
-        x_range and y_range are coordinates on the ABI fixed grid.
+        Keyword arguments:
+        base_date -- when calculating time in seconds of the day, use the date given
+            by this datetime object.
+        lon_range, lat_range -- subset flashes to some portion of the full disk. 
+            (Default None to use all data.)
+        x_range, y_range -- as with lon_range, lat_range but for coordinates on 
+            the ABI fixed grid. (Default None to use all data.)
+        min_events, min_groups -- subset only those flashes with at least this many
+            events or groups. (Default None to use all data.)
+        clip_events -- Use the corner point lookup table (see corner_pickle) to 
+            reconstruct the event, group, and flash polygons and split them by the target
+            grid. 
+        fixed_grid -- Convert GLM L2 lon, lat to ABI fixed grid coordinates
+        nadir_lon -- longitude of the satellite subpoint
+        chunk_size -- process this many flashes at one time (default 100)
+        corner_pickle -- Path to a pickled look up table giving the corner point offsets
+            for events as a function of location. If None, use the built-in fixed grid
+            corner point look up table.
+        
+        See the documentation for read_flash_chunk for how the above arguments are used.
      """
     if corner_pickle is None:
         resource_package = __name__  # Could be any module/package name
@@ -80,12 +103,52 @@ def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
     #     results = list(pool.map(chunk_func, flash_chunks))
     
     results = list(map(chunk_func,flash_chunks))
-        
+    
     return results
 
 
 def read_flash_chunk(flash_data, glm=None, target=None, base_date=None, nadir_lon=None, 
          fixed_grid=False, clip_events=True, corner_pickle=None):
+    """ For the chunk of GLM data in flash_data, prepare a dataset that can be sent
+    to lmatools for accumulation on a target grid. 
+         
+    In the full-quality mode (using both clip_events and fixed_grid), the following 
+    steps take place:
+    0. GLM data are renavigated to the GLM fixed grid and the lightning ellipse removed.
+    1. GLM event polygons are reconstructed from a corner point lookup table. 
+    2. The events for each group (flash) are joined into polygons for each group (flash).
+    3. Split the event polygons by the target grid
+    4. Split the group polygons by the target grid
+    5. Split the flash polygons by the target grid
+    6. For each of the split polygons, calculate its centroid, area, fraction of
+         the original polygon area, and fraction of the target grid cell covered
+    7. Create numpy arrays with named dtype (i.e., data table with named columns) for 
+         (child, parent) pairs at the event, group, and flash levels. See the
+         documentation for mimic_lma_dataset.
+    8. Send these data to the target, or return them directly if target is None.
+    
+    Arguments:
+    flash_data -- xarray dataset giving the flash data, like that produced by a call
+         to glm.subset_flashes
+         
+    Keyword arguments:
+    glm -- a glmtools.io.glm.GLMDataset instance
+    target -- dictionary, with keys 'flash', 'group', and 'event' pointing to the 
+        pipeline inlet for each, to which (child, parent) arrays are sent for each.
+        If None, return a dictionary with the keys above, and values (child, parent)
+        for each.            
+    base_date -- when calculating time in seconds of the day, use the date given
+        by this datetime object.
+    nadir_lon -- longitude of the satellite subpoint.
+    fixed_grid -- Convert GLM L2 lon, lat to ABI fixed grid coordinates
+    clip_events -- If an instance of glmtools.grid.clipping.QuadMeshSubset is provided,
+        use it to slice the GLM event, group, and flash polygons by the target grid given 
+        by QuadMesh. The corner point lookup table (see corner_pickle) is used to 
+        reconstruct the event, group, and flash polygons.
+    corner_pickle -- Path to a pickled look up table giving the corner point offsets
+        for events as a function of location. If None, use the built-in fixed grid
+        corner point look up table.
+    """
     geofixcs, grs80lla = get_GOESR_coordsys(sat_lon_nadir=nadir_lon)
 
     split_event_dataset=None
@@ -332,14 +395,16 @@ flash_dtype=[('area', '<f4'),  ('total_energy', '<f4'),
 
 def _fake_lma_from_glm_flashes(flash_data, basedate, 
         split_events=None, split_groups=None, split_flashes=None):
-    """ `flash_data` is an xarray dataset of flashes, groups, and events for
-         (possibly more than one) lightning flash. `flash_data` can be generated
-         with `GLMDataset.subset_flashes` or `GLMDataset.get_flashes`.
-        
-        Here we create fake LMA events using the flash-level data. If we have
-        split flash data, it means the fake LMA events were generated by 
-        splitting the polygon resulting from the union of all events that are a
-        part of each flash.
+    """ Helper function used by mimic_lma_dataset.
+
+    `flash_data` is an xarray dataset of flashes, groups, and events for
+    (possibly more than one) lightning flash. `flash_data` can be generated
+    with `GLMDataset.subset_flashes` or `GLMDataset.get_flashes`.
+
+    Here we create fake LMA events using the flash-level data. If we have
+    split flash data, it means the fake LMA events were generated by
+    splitting the polygon resulting from the union of all events that are a
+    part of each flash.
     """
     
     flash_np = np.empty_like(flash_data.flash_id.data, dtype=flash_dtype)
@@ -395,14 +460,16 @@ def _fake_lma_from_glm_flashes(flash_data, basedate,
     
 def _fake_lma_from_glm_groups(flash_data, basedate, 
         split_events=None, split_groups=None, split_flashes=None):
-    """ `flash_data` is an xarray dataset of flashes, groups, and events for
-         (possibly more than one) lightning flash. `flash_data` can be generated
-         with `GLMDataset.subset_flashes` or `GLMDataset.get_flashes`.
-        
-        Here we create fake LMA events using the group-level data. If we have
-        split group data, it means the fake LMA events were generated by 
-        splitting the polygon resulting from the union of all events that are a
-        part of each group.
+    """ Helper function used by mimic_lma_dataset.
+
+    `flash_data` is an xarray dataset of flashes, groups, and events for
+    (possibly more than one) lightning flash. `flash_data` can be generated
+    with `GLMDataset.subset_flashes` or `GLMDataset.get_flashes`.
+
+    Here we create fake LMA events using the group-level data. If we have
+    split group data, it means the fake LMA events were generated by
+    splitting the polygon resulting from the union of all events that are a
+    part of each group.
     """
     
     flash_np = np.empty_like(flash_data.group_id.data, dtype=flash_dtype)
@@ -459,14 +526,16 @@ def _fake_lma_from_glm_groups(flash_data, basedate,
 
 def _fake_lma_from_glm_events(flash_data, basedate, 
         split_events=None, split_groups=None, split_flashes=None):
-    """ `flash_data` is an xarray dataset of flashes, groups, and events for
-         (possibly more than one) lightning flash. `flash_data` can be generated
-         with `GLMDataset.subset_flashes` or `GLMDataset.get_flashes`.
-        
-        Here we create fake LMA events using the event-level data. If we have
-        split event data, it means the fake LMA events were generated by 
-        splitting each event polygon across the target grid. So, in this case
-        the flash_np data are actually the GLM event polygons.
+    """ Helper function used by mimic_lma_dataset
+
+    `flash_data` is an xarray dataset of flashes, groups, and events for
+    (possibly more than one) lightning flash. `flash_data` can be generated
+    with `GLMDataset.subset_flashes` or `GLMDataset.get_flashes`.
+
+    Here we create fake LMA events using the event-level data. If we have
+    split event data, it means the fake LMA events were generated by
+    splitting each event polygon across the target grid. So, in this case
+    the flash_np data are actually the GLM event polygons.
     """
     
     flash_np = np.empty_like(flash_data.event_id.data, dtype=flash_dtype)
@@ -525,7 +594,22 @@ def mimic_lma_dataset(flash_data, basedate,
                       split_events=None, 
                       split_groups=None,
                       split_flashes=None):
-    """ Mimic the LMA data structure from GLM """        
+    """ Mimic the LMA data structure from GLM data. 
+    
+    Arguments:
+    flash_data -- xarray dataset of GLM data.
+    basedate -- Use the date given by this datetime object when calculating time in 
+        seconds of the day as needed by lmatools
+                      
+    Returns:
+    fake_lma -- dictionary with keys 'flash', 'group', and 'event'. Each key has a 
+        value (child, parent). These arrays mimic the format lmatools expects, and 
+        are treated as point data when used by by lmatools. The child points 
+        ("events" in lmatools) are the sub-polygons, while the parent points 
+        ("flashes" in lmatools) are the properties of the parent event, group, or
+        flash. There will be one or more child points for each parent.
+    """        
+
     fl_events, fl_flashes = _fake_lma_from_glm_flashes(flash_data, basedate,
         split_events=split_events, split_groups=split_groups, 
         split_flashes=split_flashes)

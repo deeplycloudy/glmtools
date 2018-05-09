@@ -1,9 +1,12 @@
-"""
+""" Support routines for clipping polygons, especially against a quadrilateral mesh.
 
 Depends on pyclipper: https://github.com/greginvm/pyclipper
 which is a simple Python wrapper for Angus Johnson's Clipper.
 http://www.angusj.com/delphi/clipper.php#code
 
+"""
+
+__todo_thoughts = """
 Later: check to see why Clipper isn't used in Agg instead of Sutherland-Hodgman. 
 There is an Agg demo in the Clipper source.
 Would be good to do a demo with some radar data to see just how fast this could be
@@ -111,17 +114,27 @@ def polys_from_quadmesh(x, y):
     return quads
 
 class QuadMeshSubset(object):
-    """ Given a quadmesh, create a KDTree for use in grabbing a subset of the
-    quadrilaterals comprising the mesh. We don't assume a regular grid,
-    i.e., the target polygons might be non-rectilinear as well.
+    """ This class retrieves the polygons defined by a quadrilateral mesh based 
+    on proximity to some point of interest.
     
-    Uses the centroid of the quads because we only need to get close enough.
+    The lookup is performed with two methods. If the quadmesh is regular (the variation 
+    along the two coordinates is described by two 1D arrays) then a relatively fast
+    lookup method is employed. (An even faster version for a regular grid with even 
+    spacing should be possible, but is only partially implemented.) For a non-rectilinear
+    quadmesh, this class maintains a KDTree query method that is fully general.
+    
+    Methods:
+    quads_nearest -- Perform the nearest-quad query given a location.
     """
     def __init__(self, xedge, yedge, n_neighbors=12, X_ctr=None, Y_ctr=None,
         regular=False):
-        """ xedge and yedge are the x and y edge coordinates of a quadrilateral mesh
+        """ 
+        
+        xedge and yedge -- the x and y edge coordinates (not centers) of a
+        quadrilateral mesh, as 2D arrays. For a regular grid, these can be 
+        produced by creating a meshgrid of the 1D coordinate edge arrays.
 
-        min_neighbors is the minimum number of neighbors returned
+        n_neighbors -- the minimum number of neighbors returned for a non-regular query
         
         
         """
@@ -218,10 +231,15 @@ class QuadMeshSubset(object):
     #             yield quad
         
     def query_tree(self, x):
-        """ x is a 2-tuple or two element array in the same coordinates as self.xedge, self.yedge
-        
-        returns dist, quad_x_idxs, quad_y_idxs. These are indices into the pixel center arrays
-        but also work as the low-index corner of the edge arrays
+        """ Given a position find the nearest quads.
+        Arguments:
+        x -- a 2-tuple or two element array in the same coordinates as 
+            self.xedge, self.yedge
+
+        Returns:
+        dist, quad_x_idxs, quad_y_idxs -- These are indices into the pixel center arrays
+            but also work as the low-index corner of the edge arrays. dist will be None
+            for a regular grid query.
         """
         if self.regular:
             # This is a single point query, so the xmin, xmax are the same.
@@ -254,7 +272,7 @@ class QuadMeshSubset(object):
     def _quads_in_bbox_regular(self, bbox, pad=2):
         """ Assume a perfectly regular grid, with uniform spacing in x and y
             and increasing xedge and yedge. bbox should be min, max, min, max
-            for x and y respectively.
+            for x and y respectively. Should be faster than _quads_in_bbox_fast.
             
             NOTE: This function is incomplete and untested.
         """
@@ -282,6 +300,15 @@ class QuadMeshSubset(object):
         return vals
 
     def _quads_in_bbox_fast(self, bbox, pad=2):
+        """ Find the quadrilaterals within a bounding box, optionally adding
+        padding. Uses np.digitize to find the quadrilaterals more quickly than
+        a brute force search.
+        
+        Arguments:
+        bbox -- (xmin, xmax, ymin, ymax)
+        pad -- add this many additional quadrilaterals to each side (default 2)
+        
+        """
         xlim = bbox[:2]
         ylim = bbox[2:]
         # print('bbox is', bbox)
@@ -325,7 +352,17 @@ class QuadMeshSubset(object):
         return vals
 
     def quads_in_bbox(self, bbox):
-        """ bbox is xmin, xmax, ymin, ymax """
+        """ Given a bounding box, return the quadrilaterials within it. If the grid is
+        regular, a faster lookup method will be used. By default, uses a brute-force
+        vectorized boolean query over the whole quadmesh.
+        
+        Arguments:
+        bbox -- (xmin, xmax, ymin, ymax)
+        
+        Returns:
+        quads -- (M, 4, 2) array of coordinates for M quadrilaterals.
+        quad_x_idx, quad_y_idx -- indices into the original mesh for each of the M quads
+        """
         if self.regular:
             # quad_x_idx, y_idx refer to the first and second dimensions
             # of quads, and may not match X_ctr1d, Y_ctr1d.
@@ -436,13 +473,18 @@ class QuadMeshPolySlicer(object):
         self.mesh = mesh
 
     def slice(self, polys, bbox=None):
-        """ polys is an (N, M, 2) array or N-element list of (M,2) arrays
+        """ Slice a list of polygons with the quadmesh in self.mesh.
+        
+        The calculation is paralleled for chunks of polygons. The parallelization can be 
+        turned off by commenting out a line near the end of this method.
+        
+        polys is an (N, M, 2) array or N-element list of (M,2) arrays
         of N polygons with M vertices in two dimensions.
         
         if bbox = (xmin, xmax, ymin, ymax) is present, slice with the mesh
         subset within that bbox. If bbox is true, use the dimensions of each
         poly to figure out the bbox. Otherwise, n nearest neighbors as
-        configured for the QuadMeshSubset object are returned.
+        configured for the QuadMeshSubset object are returned, using a KDTree lookup.
         
         Returns (sliced_poly_list, orig_poly_areas)
         
@@ -551,13 +593,17 @@ class QuadMeshPolySlicer(object):
         sub_poly_args = poly_arr, areas, all_quads
         sub_poly_args = tuple(zip(poly_arr, areas, all_quads))
 
+        # Use this version instead of the one below to serialize on the same process
         # sub_polys = list(map(make_sub_polys, sub_poly_args))
+        
+        # Use this version instead of the one above to parallelize on subprocesses.
+        sub_polys = list(run_pool_map(make_sub_polys, sub_poly_args))
+        
+        # This is what run_pool_map does, but run_pool_map isolates local namespace
         # pool = ProcessPoolExecutor(max_workers=6)
         # with pool:
         #     sub_polys = list(pool.map(make_sub_polys, sub_poly_args, chunksize=100))
 
-
-        sub_polys = list(run_pool_map(make_sub_polys, sub_poly_args))
         return sub_polys, areas
 
     def quad_frac_from_poly_frac_area(self, frac_areas, total_area, 
@@ -577,6 +623,22 @@ class QuadMeshPolySlicer(object):
 
 
 def make_sub_polys(args):
+    """ Chop up one polygon by a set of quadrilaterals.
+    
+    args unpacks to (poly, area, q_dat), where q_dat is (quads, quad_x_idx, quad_y_idx).
+    poly -- a list of (x,y) vertices or an (N,2) array of N vertex coordinates.
+    area -- the area of poly
+    quads -- (M, 4, 2) array of coordinates of the four corners M quadrilaterals
+    quad_x_idx, quad_y_idx -- indices of the quadrilateral in the original quadmesh
+    
+    Returns (clip_polys, frac_areas, (clip_x_idx, clip_y_idx))
+    clip_polys -- list of polygons resulting from the subdivision of the quadrilaterals
+    frac_areas -- fraction of the original polygon covered by each clip_poly
+    (clip_x_idx, clip_y_idx) -- index of the clipped polygons in the original quadmesh
+    
+    If the sum of frac_areas is more than 0.1 percent different from the original polygon
+    a debug message will be logged.
+    """
     poly, area, q_dat = args
     quads, quad_x_idx, quad_y_idx = q_dat
     all_clip_polys, count_per_quad = clip_polys_by_one_poly(quads, poly)
@@ -595,9 +657,16 @@ not_enough_neighbors_err = """Polygon only {0} percent covered by quads"""
 
 
 
-def run_pool_map(f,a):
-    pool = ProcessPoolExecutor(max_workers=4)
-    return pool.map(f,a,chunksize=100)
+def run_pool_map(f,a, max_workers=4, chunksize=100):
+    """ Run function f with against a list of arguments a (map) in parallel
+    using subprocesses.
+    
+    Keyword arguments:
+    max_workers -- number of subprocesses
+    chunksize -- number of arguments to send to each subprocess
+    """
+    pool = ProcessPoolExecutor(max_workers=max_workers)
+    return pool.map(f,a,chunksize=chunksize)
 # def dummy_work(a):
 #     return a
 # value = run_pool_map(dummy_work, list(range(10)))

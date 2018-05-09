@@ -23,8 +23,41 @@ from lmatools.stream.subset import broadcast
 import sys
     
 class GLMGridder(FlashGridder):
+    """ Subclass of lmatools.FlashGridder specialized for gridding GLM data. Sets up
+    an accumulation pipeline that receives flash, group, or event data and flows those
+    data to the appropriate target grids.
     
+    Methods:
+    gridspec_locals -- Return a tuple of instance attributes that describe the grid
+        configuration.
+    pipeline_setup -- Calls and stores the result of the two methods below
+    flash_pipeline_setup -- Creates the flash- and group-level GLM grids and sets up the
+        accumulation pipeline for each grid type
+    event_pipeline_setup -- Creates the event-level GLM grids and sets up the
+        accumulation pipeline for each grid type
+    output_setup -- Sets up the NetCDF filenames, variable names, etc. for use by the
+        output writer.
+    process_flashes -- Read data from a glmtools.io.glm.GLMDataset instance and push it
+        into the accumulation pipeline
+    
+    """
     def gridspec_locals(self):
+        """  Return a tuple of instance attributes that describe the grid configuration.
+        
+        Arguments: none.
+        
+        Returns, in order as a tuple:
+        event_grid_area_fraction_key -- column name in event data table that gives
+            the fraction of the target grid cell covered by the event.
+        energy_grids -- names of the grids that are some measure of energy
+        n_frames -- number of time intervals in this grid
+        xedge, yedge, zedge -- edges (not centers) of the grid cells
+        dx, dy, dz -- spacing between the grid cells
+        x0, y0, z0 -- first value of xedge, yedge, zedge
+        mapProj -- lmatools.CoordinateSystem instance for the target grid.
+        geoProj -- lmatools.CoordinateSystem.GeographicSystem instance for use in
+            converting longitude/latitude/altitude coordinates      
+        """
         event_grid_area_fraction_key=self.event_grid_area_fraction_key
         energy_grids=self.energy_grids
         n_frames = self.n_frames
@@ -39,6 +72,16 @@ class GLMGridder(FlashGridder):
             xedge, yedge, zedge, dx, dy, dz, x0, y0, z0, mapProj, geoProj)
 
     def flash_pipeline_setup(self):
+        """ Create target grids and set up the flash accumulation pipeline. Also used
+        to set up an equivalent group accumulation pipeline.
+        
+        Arguments: none
+        
+        Returns:
+        outgrids -- tuple of grids (numpy arrays) for the target grids
+        framer -- first stage of the pipeline that routes flashes to the correct
+            time window for accumulation.
+        """
         (event_grid_area_fraction_key, energy_grids, n_frames,
             xedge, yedge, zedge, dx, dy, dz, x0, y0, z0, mapProj, geoProj) = (
             self.gridspec_locals())
@@ -102,6 +145,15 @@ class GLMGridder(FlashGridder):
         return outgrids, framer
 
     def event_pipeline_setup(self):
+        """ Create target grids and set up the event accumulation pipeline.
+        
+        Arguments: none
+        
+        Returns:
+        outgrids -- tuple of grids (numpy arrays) for the target grids
+        framer -- first stage of the pipeline that routes flashes to the correct
+            time window for accumulation.
+        """
         (event_grid_area_fraction_key, energy_grids, n_frames,
             xedge, yedge, zedge, dx, dy, dz, x0, y0, z0, mapProj, geoProj) = (
             self.gridspec_locals())
@@ -150,8 +202,21 @@ class GLMGridder(FlashGridder):
         return outgrids, framer
 
     def pipeline_setup(self):
-        """
+        """ Create target grids and set up the flash, group and event accumulation 
+        pipelines. Each pipeline starts by subdividing the flash dataset into the correct
+        time frames, then broadcasts those time chunks to a separate pipeline for each
+        grid subtype. Those pipelines typically then project the data onto the target
+        grid, calculate point or extent density, and accumulate on the target grid 
+        (weighting by fractional coverage of the target grid in some cases).
         
+        Arguments: none.
+        Returns: none.
+        
+        Sets the following instance attributes:
+        outgrids -- tuple of grid types (numpy arrays)
+        outgrids_3d -- None
+        framer -- dictionary, with keys 'flash', 'group', and 'event' pointing to the 
+            pipeline inlet for each.
         """
         (event_grid_area_fraction_key, energy_grids, n_frames,
             xedge, yedge, zedge, dx, dy, dz, x0, y0, z0, mapProj, geoProj) = (
@@ -198,10 +263,18 @@ class GLMGridder(FlashGridder):
         self.framer = all_framers
         
     def output_setup(self):
-        """
-        For each of the grids of interest in self.outgrids, set up the
-        outfile names, units, etc. These are all the metadata that go with the
-        actual values on the grids.
+        """ Set up grid names and variable types for output.
+        
+        Arguments: none.
+        Returns: none.
+        
+        Sets the following instance attributes, which parallel self.outgrids as set
+        by self.setup_pipeline:
+        outfile_postfixes -- last part of each NetCDF filename 
+        field_names -- variable names within the NetCDF file for each grid
+        field_descriptions -- plain language description of each grid
+        field_units -- units for each grid
+        outformats -- NetCDF variable type codes for each grid
         """
         
         energy_grids = self.energy_grids
@@ -272,6 +345,22 @@ class GLMGridder(FlashGridder):
                         min_points_per_flash=None, min_groups_per_flash=None,
                         clip_events=False, fixed_grid=False,
                         nadir_lon=None, corner_pickle=None):
+        """ Read data from a glmtools.io.glm.GLMDataset instance and push it into the
+        accumulation pipeline
+        
+        Arguments:
+        glm -- a glmtools.io.glm.GLMDataset instance
+                        
+        Keyword arguments:
+        corner_pickle: currently unused.
+        clip_events, fixed_grid, nadir_lon: passed directly to 
+            glmtools.io.mimic_lma.read_flashes.
+        lat_bnd, lon_bnd, x_bnd, y_bnd -- passed to lat_range, lon_range, x_range, 
+            y_range in glmtools.io.mimic_lma.read_flashes.
+        min_groups_per_flash and min_points_per_flash are passed to min_groups 
+            and min_events in glmtools.io.mimic_lma.read_flashes.
+        
+        """
         self.min_points_per_flash = min_points_per_flash
         if min_points_per_flash is None:
             # the FlashGridder class from lmatools needs an int to be able to
@@ -433,12 +522,25 @@ class GridOutputPreprocess(object):
 
 # @profile
 def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
-    """ Grid GLM data that has been converted to an LMA-like array format.
-        
-        Assumes that GLM data are being gridded on a lat, lon grid.
-        
-        Keyword arguments to this function
-        are those to the FlashGridder class and its functions.
+    """ Grid GLM data to a 2D grid between start_time and end_time.
+    
+    Arguments:
+    start_time -- datetime object
+    end_time -- datetime object
+    
+    Keyword arguments:
+    proj_name -- string, one of [latlong, fixed_grid]. If latlong, the x_bnd and y_bnd
+        kwargs are used as lon_bnd and lat_bnd. 
+    subdivide -- integer S, chop up the target grid into S x S tiles and process each
+        tile in parallel (default 1). Only used for the fixed grid.
+    
+    Passed to GLMGridder.process_flashes:
+        min_points_per_flash, min_groups_per_flash, clip_events, 
+        fixed_grid, nadir_lon, corner_pickle
+    Passed to GLMGridder.write_grids:
+        outpath, output_writer, output_writer_3d,
+        output_kwargs, output_filename_prefix
+    Remaining keyword arguments are passed to the GLMGridder on initialization.
     """
     
     kwargs['do_3d'] = False
@@ -480,11 +582,13 @@ def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
     this_proc_each_grid = partial(proc_each_grid, start_time=start_time,
         end_time=end_time, GLM_filenames=GLM_filenames)
 
-    pool = ProcessPoolExecutor(max_workers=4)
-    with pool:
-        # Block until the pool completes (pool is a context manager)
-        outputs = pool.map(this_proc_each_grid, subgrids)
-    # outputs = list(map(this_proc_each_grid, subgrids))
+    if subdivide_grid > 1:
+        pool = ProcessPoolExecutor(max_workers=4)
+        with pool:
+            # Block until the pool completes (pool is a context manager)
+            outputs = pool.map(this_proc_each_grid, subgrids)
+    else:
+        outputs = list(map(this_proc_each_grid, subgrids))
     for op in outputs:
         log.debug(outputs)
 
@@ -492,8 +596,24 @@ def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
 
 
 # @profile
-def proc_each_grid(subgrid, start_time=None, end_time=None, 
-    GLM_filenames=None):
+def proc_each_grid(subgrid, start_time=None, end_time=None, GLM_filenames=None):
+    """ Process one tile (a subset of a larger grid) of GLM data.
+    
+    Arguments:
+    subgrid -- tuple of (xi,yi), kwargs, proc_kwargs, out_kwargs, pads) where
+        (xi, yi) -- the subgrid tile index
+        kwargs -- passed to GLMGridder.__init__
+        proc_kwargs -- passed to GLMGridder.process_flashes
+        out_kwargs -- passed to GLMGridder.write_grids
+        pads -- (n_x_pad, n_y_pad, x_pad, y_pad) counts and total distances of padding
+            added to this subgrid
+    
+    Keyword arguments:
+    start_time -- datetime object
+    end_time -- datetime object
+    GLM_filenames -- a list of GLM filenames to process
+    """
+    
     subgridij, kwargsij, process_flash_kwargs_ij, out_kwargs_ij, pads = subgrid
 
     # Eventually, we want to trim off n_x/y_pad from each side of the grid
