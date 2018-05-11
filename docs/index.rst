@@ -98,6 +98,7 @@ the ABI cloud tops, and will have parallax with respect to ground for all the sa
 reasons ABI does.
 
 .. code-block:: bash
+
    python make_GLM_grids.py -o /path/to/output/ --fixed_grid --split_events \
    --goes_position east --goes_sector conus --dx=2.0 --dy=2.0 --ctr_lon 0.0 --ctr_lat 0.0 \
    --start=2018-01-04T05:37:00 --end=2018-01-04T05:38:00 \
