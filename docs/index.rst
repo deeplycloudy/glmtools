@@ -6,6 +6,13 @@
 Documentation for glmtools
 ==========================
 
+.. toctree::
+   :maxdepth: 2
+   :hidden:
+   
+   api/index
+   callgraph
+
 Installation
 ============
 
@@ -23,7 +30,7 @@ fractional pixel coverage. Doing so requires the ``pyclipper`` wrapper for the f
 Step by step instructions
 ------------------------- 
 
-The instructions below assume the Anaconda Python distribution (`miniconda` is
+The instructions below assume the Anaconda Python distribution (``miniconda`` is
 fine), and the availability of the ``conda`` package manager.
 
 Until development on ``lmatools`` stabilizes, it is recommended
@@ -90,14 +97,13 @@ fixed grid in the CONUS sector at 2 km resolution. These images will overlay pre
 the ABI cloud tops, and will have parallax with respect to ground for all the same
 reasons ABI does.
 
-```bash 
-python make_GLM_grids.py -o /path/to/output/ --fixed_grid --split_events \
---goes_position east --goes_sector conus --dx=2.0 --dy=2.0 --ctr_lon 0.0 --ctr_lat 0.0 \
---start=2018-01-04T05:37:00 --end=2018-01-04T05:38:00 \
-OR_GLM-L2-LCFA_G16_s20180040537000_e20180040537200_c20180040537226.nc \
-OR_GLM-L2-LCFA_G16_s20180040537200_e20180040537400_c20180040537419.nc \
-OR_GLM-L2-LCFA_G16_s20180040537400_e20180040538000_c20180040538022.nc \
-```
+.. code-block:: bash
+   python make_GLM_grids.py -o /path/to/output/ --fixed_grid --split_events \
+   --goes_position east --goes_sector conus --dx=2.0 --dy=2.0 --ctr_lon 0.0 --ctr_lat 0.0 \
+   --start=2018-01-04T05:37:00 --end=2018-01-04T05:38:00 \
+   OR_GLM-L2-LCFA_G16_s20180040537000_e20180040537200_c20180040537226.nc \
+   OR_GLM-L2-LCFA_G16_s20180040537200_e20180040537400_c20180040537419.nc \
+   OR_GLM-L2-LCFA_G16_s20180040537400_e20180040538000_c20180040538022.nc \
 
 To start with, look at the flash extent density and total energy grids.
 
