@@ -15,10 +15,10 @@ decoding of the ``_Unsigned`` integer data that is used throughout the GLM
 NetCDF files. ``matplotlib`` is used for plotting. Gridding and flash statistics
 are built on top of ``lmatools``.
 
-If provided with CCD pixel shape information, ``glmtools`` can regrid the GLM
-event detections onto an arbitrary target grid using fractional pixel coverage. 
-Doing so requires the ``pyclipper`` wrapper for the freeware `Clipper 
-<http://www.angusj.com/delphi/clipper.php>`_ c++ library.
+glmtools includes CCD pixel shape information in fixed grid coordinates, so that
+``glmtools`` can regrid the GLM event detections onto an arbitrary target grid using
+fractional pixel coverage. Doing so requires the ``pyclipper`` wrapper for the freeware
+`Clipper <http://www.angusj.com/delphi/clipper.php>`_ c++ library.
 
 Step by step instructions
 ------------------------- 
@@ -63,12 +63,14 @@ If you are using the environment created by environment.yml, this environment wi
 Get some GLM data, and check it for sanity
 ------------------------------------------
 
-The GLM Level 2 data that can be obtained from, for example, a GOES Rebroadcast
-feed, are preliminary and non-operational. These files are in NetCDF 4 format,
-and begin with ``OR_GLM-L2-LCFA_G16``. Before undertaking further processing,
-is recommended that the files be checked for sanity using the
-``examples/check_glm_data.py`` script, as shown below. The script contains more
-documentation about what is checked.
+The GLM Level 2 data can be obtained from a GOES Rebroadcast feed, an LDM or THREDDS
+service, the Amazon S3 bucket that is part of the NOAA Big Data Project or perhaps other
+sources. These files are in NetCDF 4 format, and begin with ``OR_GLM-L2-LCFA_G16``.
+
+Early preliminary and non-operational data had some internal inconsistencies that prevent
+further use with glmtools. Before undertaking further processing, it is recommended that
+the files be checked for sanity using the ``examples/check_glm_data.py`` script, as shown
+below. The script contains some documentation about what is checked.
 
 .. code-block:: bash
 
@@ -83,24 +85,36 @@ Grid the GLM data
 
 The script ``examples/grid/make_GLM_grids.py`` is a command line utility; run with ``--help`` for usage. 
 
-For instance, the following command will grid one minute of data (3 GLM files) on the ABI fixed grid in the CONUS sector at 10 km resolution.
+For instance, the following command will grid one minute of data (3 GLM files) on the ABI
+fixed grid in the CONUS sector at 2 km resolution. These images will overlay precisely on
+the ABI cloud tops, and will have parallax with respect to ground for all the same
+reasons ABI does.
 
+```bash 
+python make_GLM_grids.py -o /path/to/output/ --fixed_grid --split_events \
+--goes_position east --goes_sector conus --dx=2.0 --dy=2.0 --ctr_lon 0.0 --ctr_lat 0.0 \
+--start=2018-01-04T05:37:00 --end=2018-01-04T05:38:00 \
+OR_GLM-L2-LCFA_G16_s20180040537000_e20180040537200_c20180040537226.nc \
+OR_GLM-L2-LCFA_G16_s20180040537200_e20180040537400_c20180040537419.nc \
+OR_GLM-L2-LCFA_G16_s20180040537400_e20180040538000_c20180040538022.nc \
+```
+
+To start with, look at the flash extent density and total energy grids.
+
+`ctr_lon` and `ctr_lat` aren't used, but are required anyway. Fixing this would
+make a nice first contribution!
+
+Removing the --split_events flag and setting the grid to 10 km allows for gridding
+of the raw point data, and will run much faster. Finer resolutions will cause gaps in
+flash extent density because the point data are spaced about 8-12 km apart.
 Note that these grids will either have gaps or will double-count events along
 GLM pixel borders, because there is no one grid resolution which exactly
 matches the GLM pixel size as it varies with earth distortion over the field
 of view.
 
-.. code-block:: bash
-
-    python make_GLM_grids.py -o /path/to/output/ --fixed_grid \
-    --goes_position east --goes_sector conus --ctr_lon 0.0 --ctr_lat 0.0 \
-    --dx=10.0 --dy=10.0 --start=2018-01-04T05:37:00 --end=2018-01-04T05:38:00 \
-    OR_GLM-L2-LCFA_G16_s20180040537000_e20180040537200_c20180040537226.nc \
-    OR_GLM-L2-LCFA_G16_s20180040537200_e20180040537400_c20180040537419.nc \
-    OR_GLM-L2-LCFA_G16_s20180040537400_e20180040538000_c20180040538022.nc \
-
-The same script can be used to grid LMA data on the same grid by adding the
-``--lma`` flag. This step requires LMA HDF5 files containing flash-sorted data.
+The same script can be used to grid LMA data on the same grid by adding the ``--lma``
+flag. This step requires LMA HDF5 files containing flash-sorted data as produced by
+lmatools.
 
 
 Calculate time series flash rate data 
@@ -111,10 +125,11 @@ The script ``examples/glm-lasso-stats.py`` is a command line utility; run with
 similar arguments. This script requires a cell lasso file, which may be as
 simple as a bounding box, or as elaborate as a time-evolving pattern.
 
-An example lasso file is found in ``examples/lasso-WTLMA-50km-2017Jul05.txt``.
-This simple rectangular bounding box is centered on the West Texas LMA and is
-valid for a few hours on 5 July 2017. Both the valid time and the coordinates
-can be edited directly. The first and last vertices of the bounding box (any polygon is valid) must be repeated to close the polygon.
+An example lasso file is found in ``examples/lasso-WTLMA-50km-2017Jul05.txt``. This
+simple rectangular bounding box is centered on the West Texas LMA and is valid for a few
+hours on 5 July 2017. Both the valid time and the coordinates can be edited directly to
+change to a different day or box. The first and last vertices of the bounding box (any
+polygon is valid) must be repeated to close the polygon.
  
 Suggestions for automating
 --------------------------
