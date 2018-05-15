@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 
 import numpy as np
 import xarray as xr
+import pandas as pd
 
 from glmtools.io.traversal import OneToManyTraversal
 from glmtools.io.lightning_ellipse import ltg_ellps_lon_lat_to_fixed_grid
@@ -189,6 +190,8 @@ class GLMDataset(OneToManyTraversal):
             super().__init__(dataset.set_index(**idx), 
                              self.entity_ids, self.parent_ids)
             self.__init_parent_child_data()
+            self.__init_fixed_grid_data()
+            # self.__init_event_lut()
         else:
             self.dataset = dataset
     
@@ -257,14 +260,11 @@ class GLMDataset(OneToManyTraversal):
         good = np.ones(self.dataset.flash_id.shape[0], dtype=bool)
         flash_data = self.dataset
         
-        if (x_range is not None) | (y_range is not None):
-            nadir_lon = flash_data.lon_field_of_view.data
-            flash_x, flash_y = ltg_ellps_lon_lat_to_fixed_grid(
-                flash_data.flash_lon.data, flash_data.flash_lat.data,
-                nadir_lon)
         if (x_range is not None):
+            flash_x = self.dataset.flash_x.data
             good &= ((flash_x < x_range[1]) & (flash_x > x_range[0]))
         if (y_range is not None):
+            flash_y = self.dataset.flash_y.data
             good &= ((flash_y < y_range[1]) & (flash_y > y_range[0]))
         if lon_range is not None:
             good &= ((flash_data.flash_lon < lon_range[1]) & 
@@ -286,6 +286,114 @@ class GLMDataset(OneToManyTraversal):
             single element list.
         """
         these_flashes = self.reduce_to_entities('flash_id', flash_ids)
+        # lutevents = get_lutevents(these_flashes)
+        # print(lutevents)
+        # these_flashes.update(lutevents)
         return these_flashes
-        
 
+    def __init_fixed_grid_data(self):
+        """ Calculate the fixed grid coordinates for flashes, groups, and events
+            and save them to self.dataset as new variables named
+            event_x, event_y, group_x, group_y, flash_x, flash_y
+        """
+        nadir_lon = self.dataset.lon_field_of_view.data
+        event_x, event_y = ltg_ellps_lon_lat_to_fixed_grid(
+            self.dataset.event_lon.data, self.dataset.event_lat.data, nadir_lon)
+        self.dataset['event_x'] = xr.DataArray(event_x, dims=[self.ev_dim,])
+        self.dataset['event_y'] = xr.DataArray(event_y, dims=[self.ev_dim,])
+
+        group_x, group_y = ltg_ellps_lon_lat_to_fixed_grid(
+            self.dataset.group_lon.data, self.dataset.group_lat.data, nadir_lon)
+        self.dataset['group_x'] = xr.DataArray(group_x, dims=[self.gr_dim,])
+        self.dataset['group_y'] = xr.DataArray(group_y, dims=[self.gr_dim,])
+
+        flash_x, flash_y = ltg_ellps_lon_lat_to_fixed_grid(
+            self.dataset.flash_lon.data, self.dataset.flash_lat.data, nadir_lon)
+        self.dataset['flash_x'] = xr.DataArray(flash_x, dims=[self.fl_dim,])
+        self.dataset['flash_y'] = xr.DataArray(flash_y, dims=[self.fl_dim,])
+
+    # def __init_event_lut(self):
+    #     """ Used on init to set up the event lookup table for the whole dataset """
+    #     lutevents = get_lutevents(self.dataset)
+    #     self.dataset.update(lutevents)
+
+
+def get_lutevents(dataset, scale_factor=28e-6, event_dim='number_of_events',
+        x_range=(-0.31, 0.31), y_range=(-0.31, 0.31)):
+    """ Build an event lookup table. Assign each event location a "sort of" pixel ID
+        based on its fixed grid coordinates, discretized to some step interval that is
+        less than the minimum pixel spacing of 224 microrad=8 km at nadir.
+
+        Returns a new dataset with dimension "lutevent_id", having an index of the same
+        name. The dataset is a (shallow) copy, but a new xarray object
+        
+        If needed, returned dataset lutevents can be added to the original dataset with
+        dataset.update(lutevents).
+
+        If the pixel ID were stored as a 32 bit unsigned integer, (0 to 4294967295)
+        that is 65536 unique values for a square (x,y) grid, the minimum safe scale
+        factor for the span of the full disk is
+        (0.62e6 microradians)/65536 = 9.46 microradians
+        which is a bit large. Therefore, the implementation uses 64 bit unsigned
+        integers to be safe.
+
+        Arguments:
+        dataset: GLM dataset in xarray format
+
+        Keyword arguments:
+        scale_factor: discretization interval, radians (default 28e-6)
+        x_range, y_range: range of possible fixed grid coordinate values
+            (default -/+.31 radians, which is larger than the
+            full disk at geo. Ref: GOES-R PUG Vol. 3, L1b data.)
+    """
+    dataset = dataset.copy()
+    event_x, event_y = dataset.event_x.data, dataset.event_y.data
+    event_energy = dataset.event_energy.data
+
+    xy_id = discretize_2d_location(event_x, event_y, scale_factor, x_range, y_range)
+    dataset['event_parent_lutevent_id'] = xr.DataArray(xy_id, dims=[event_dim,])
+    eventlut_groups = dataset.groupby('event_parent_lutevent_id')
+    n_lutevents = len(eventlut_groups.groups)
+
+    # Create a new dimension for the reduced set of events, with their
+    # properties aggregated.
+    # - Sum: event_energy
+    # - Mean: event_x, event_y
+    eventlut_dtype = [('lutevent_id', 'u8'),
+                      ('lutevent_x', 'f8'),
+                      ('lutevent_y', 'f8'),
+                      ('lutevent_energy','f8'),
+                      ('lutevent_count', 'u4'),]
+    lut_iter = ((xy_id, event_x[evids].mean(), event_y[evids].mean(),
+                 event_energy[evids].sum(), len(evids))
+                 for xy_id, evids in eventlut_groups.groups.items())
+    event_lut = np.fromiter(lut_iter, dtype=eventlut_dtype, count=n_lutevents)
+    lutevents = xr.Dataset.from_dataframe(
+                    pd.DataFrame(event_lut).set_index('lutevent_id'))
+    dataset.update(lutevents)
+    return dataset
+
+def discretize_2d_location(x, y, scale, x_range, y_range, int_type='uint64'):
+    """ Calculate a unique location ID for a 2D position given some
+        discretization interval
+
+        Arguments:
+        x, y: coordinates, float arrays
+        scale: discretization interval
+        x_range, y_range: 2-tuple giving min and max x and y values
+
+        Keyword arguments:
+        int_type: numpy dtype of xy_id. 64 bit unsigned int by default, since 32 bit
+            is limited to a 65536 pixel square grid.
+
+        Returns:
+        xy_id = unique pixel ID, 64 bit unsigned integer
+    """
+    x_offset = x_range[0]
+    y_offset = y_range[0]
+    discr_x_max = np.array((x_range[1]-x_offset)/scale, dtype=int_type)
+    discr_y_max = np.array((y_range[1]-y_offset)/scale, dtype=int_type)
+    x_discr = ((x - x_offset) / scale).astype(int_type)
+    y_discr = ((y - y_offset) / scale).astype(int_type)
+    xy_discr = x_discr + y_discr*discr_x_max
+    return xy_discr
