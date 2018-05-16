@@ -24,33 +24,33 @@ def parse_glm_filename_time(time_str):
         return start
 
 def parse_glm_filename(filename):
-    """ Parse the GLM filename, reutrning (`ops_environment`, `algorithm`, 
+    """ Parse the GLM filename, reutrning (`ops_environment`, `algorithm`,
             `platform`, `start`, `end`, `created`)
         The last three values returned are datetime objects.
-        
+
         See Appendix A to the GOES-R PUG Volume 5 for the filename spec.
         OR_GLM-L2-LCFA_G16_s20171880000200_e20171880000400_c20171880000426.nc
     """
     parts = filename.replace('.nc', '').split('_')
     ops_environment = parts[0]
     algorithm = parts[1]
-    platform = parts[2]        
+    platform = parts[2]
     start = parse_glm_filename_time(parts[3])
     end = parse_glm_filename_time(parts[4])
     created = parse_glm_filename_time(parts[5])
     return ops_environment, algorithm, platform, start, end, created
-        
+
 def fix_unsigned(data, is_xarray=True):
     """
     The function is used to fix data written as signed integer bytes
     with an "_Unsigned" attribute, but which have been automatically
-    converted to floating point by xarray. 
-    
+    converted to floating point by xarray.
+
     This function removes the scale_factor and add_offset, and then casts
     to an unsigned integer type, before scaling the data once again.
-    
-    Returns a 64-bit numpy floating point array. 
-    
+
+    Returns a 64-bit numpy floating point array.
+
     Could be used to rewrite fix_event_locations, but should be equivalent.
     """
     dtype = data.encoding['dtype'].str.replace('i', 'u')
@@ -63,27 +63,27 @@ def fix_unsigned(data, is_xarray=True):
 def fix_event_locations(event_lats, event_lons, is_xarray=False):
     """ event_lats and event_lons are netCDF4 Variables, or
         if is_xarray=True, xarray Variables.
-    
+
         returns fixed (event_lats, event_lons)
-    
-        This function is used to correct for the NetCDF-Java convention of writing 
-        signed int16 and tagging it with an _Unsigned attribute. Per 
+
+        This function is used to correct for the NetCDF-Java convention of writing
+        signed int16 and tagging it with an _Unsigned attribute. Per
         http://www.unidata.ucar.edu/software/thredds/current/netcdf-java/CDM/Netcdf4.html
         NetCDF Java cannot write a proper unsigned integer.
-    
-        If the version of netcdf4-python used to read the data is >=1.2.8, then 
-        this function is not needed. The issue corrected by this function was 
-        built into netcdf4-python in PR #658 developed in response to issue #656. 
-    
+
+        If the version of netcdf4-python used to read the data is >=1.2.8, then
+        this function is not needed. The issue corrected by this function was
+        built into netcdf4-python in PR #658 developed in response to issue #656.
+
         xarray turns off auto-scaling, which also turns off the unsigned int
         correction in netCDF4-python. xarray then applies the scale/offset itself.
-        Therefore, this function is still needed to undo xarray's scale/offset, 
+        Therefore, this function is still needed to undo xarray's scale/offset,
         followed by unsigned int conversion and reapplication of the scale/offset.
-        
-        and so the scaling must be worked around 
+
+        and so the scaling must be worked around
 
     """
-    
+
     # From PUG spec, and matches values in file.
     lon_fov = (-156.06, -22.94)
     dlon_fov = lon_fov[1]-lon_fov[0]
@@ -92,7 +92,7 @@ def fix_event_locations(event_lats, event_lons, is_xarray=False):
 
 
     if is_xarray==True:
-        # unscale the data 
+        # unscale the data
         unscale_lat = ((event_lats - lat_fov[0])/scale_factor).data.astype('int32')
         unscale_lon = ((event_lons - lon_fov[0])/scale_factor).data.astype('int32')
         event_lats = unscale_lat
@@ -106,10 +106,10 @@ def fix_event_locations(event_lats, event_lons, is_xarray=False):
     unsigned = 2**16
     event_lons[event_lons < 0] += unsigned
     event_lats[event_lats < 0] += unsigned
-    
+
     event_lons_fixed = (event_lons)*scale_factor+lon_fov[0]
     event_lats_fixed = (event_lats)*scale_factor+lat_fov[0]
-    
+
     return event_lats_fixed, event_lons_fixed
 
 # These variables are tagged with an "_Unsigned" attribute
@@ -136,8 +136,8 @@ glm_unsigned_vars = glm_unsigned_float_vars + (
 def event_areas(flash_data):
     """ Given `flash_data`, which may be a subset of a `GLMDataset.dataset`,
         calculate the area for each event in `flash_data`. The calculation is:
-    
-        `event_area` = `group_area` / `n_events`    
+
+        `event_area` = `group_area` / `n_events`
     """
     event_count = flash_data.group_child_event_count
     group_area = flash_data.group_area
@@ -147,7 +147,7 @@ def event_areas(flash_data):
 class GLMDataset(OneToManyTraversal):
     def __init__(self, filename, calculate_parent_child=True):
         """ filename is any data source which works with xarray.open_dataset
-            
+
             By default, helpful additional parent-child data are calculated,
                 'event_parent_flash_id'
                 'flash_child_group_count'
@@ -156,9 +156,9 @@ class GLMDataset(OneToManyTraversal):
             and a MultiIndex is set on the dataset.
             Setting `calculate_parent_child=False` avoids the traversal of the
             dataset needed to computate these values. This can be useful when
-            one only needs to grab an attribute or two (such as the 
-            `product_time`) from the original files. In this state, the only 
-            safe route is to access `self.dataset` directly. Other methods of 
+            one only needs to grab an attribute or two (such as the
+            `product_time`) from the original files. In this state, the only
+            safe route is to access `self.dataset` directly. Other methods of
             this class are not guaranteed to work.
         """
         dataset = xr.open_dataset(filename)
@@ -181,25 +181,25 @@ class GLMDataset(OneToManyTraversal):
                              'flash_time_offset_of_first_event',
                              'flash_time_offset_of_last_event',
                              'flash_lat', 'flash_lon']}
-                             
+
         self.entity_ids = ['flash_id', 'group_id', 'event_id']
         self.parent_ids = ['group_parent_flash_id', 'event_parent_group_id']
 
         if calculate_parent_child:
             # sets self.dataset
-            super().__init__(dataset.set_index(**idx), 
+            super().__init__(dataset.set_index(**idx),
                              self.entity_ids, self.parent_ids)
             self.__init_parent_child_data()
             self.__init_fixed_grid_data()
             # self.__init_event_lut()
         else:
             self.dataset = dataset
-    
+
     def __init_parent_child_data(self):
         """ Calculate implied parameters that are useful for analyses
             of GLM data.
         """
-        flash_ids = self.replicate_parent_ids('flash_id', 
+        flash_ids = self.replicate_parent_ids('flash_id',
                                               'event_parent_group_id'
                                               )
         event_parent_flash_id = xr.DataArray(flash_ids, dims=[self.ev_dim,])
@@ -208,15 +208,15 @@ class GLMDataset(OneToManyTraversal):
 
         all_counts = self.count_children('flash_id', 'event_id')
         flash_child_count = all_counts[0]
-        flash_child_group_count = xr.DataArray(flash_child_count, 
+        flash_child_group_count = xr.DataArray(flash_child_count,
                                                dims=[self.fl_dim,])
         self.dataset['flash_child_group_count'] = flash_child_group_count
 
         group_child_count = all_counts[1]
-        group_child_event_count = xr.DataArray(group_child_count, 
+        group_child_event_count = xr.DataArray(group_child_count,
                                                dims=[self.gr_dim,])
         self.dataset['group_child_event_count'] = group_child_event_count
-        
+
         # we can use event_parent_flash_id to get the flash_child_event_count
         # need a new groupby on event_parent_flash_id
         # then count number of flash_ids that match in the groupby
@@ -224,11 +224,11 @@ class GLMDataset(OneToManyTraversal):
         grouper = self.dataset.groupby('event_parent_flash_id').groups
         count = [len(grouper[eid]) if (eid in grouper) else 0
                  for eid in self.dataset['flash_id'].data]
-        flash_child_event_count = xr.DataArray(count, 
+        flash_child_event_count = xr.DataArray(count,
                                                dims=[self.fl_dim,])
         self.dataset['flash_child_event_count'] = flash_child_event_count
- 
- 
+
+
     @property
     def fov_bounds(self):
 #         lat_bnd = self.dataset.lat_field_of_view_bounds.data
@@ -237,17 +237,17 @@ class GLMDataset(OneToManyTraversal):
         lon_bnd = self.dataset.event_lon.min().data, self.dataset.event_lon.max().data
         return lon_bnd,lat_bnd
 
-        
-    def subset_flashes(self, lon_range=None, lat_range=None, 
+
+    def subset_flashes(self, lon_range=None, lat_range=None,
                x_range=None, y_range=None,
                min_events=None, min_groups=None):
         """ Subset the dataset based on longitude, latitude, the minimum
-            number of events per flash, and/or the minimum number of groups 
+            number of events per flash, and/or the minimum number of groups
             per flash.
-            
+
             Applies subsetting only the the flashes, and then retrieves all
-            events and groups that go with those flash ids. 
-            
+            events and groups that go with those flash ids.
+
             If a flash's centroid is within the bounding box by has events that
             straddle the bounding box edge, all events will still be returned.
             Same goes for groups. Therefore, the group and event locations are
@@ -259,7 +259,7 @@ class GLMDataset(OneToManyTraversal):
         """
         good = np.ones(self.dataset.flash_id.shape[0], dtype=bool)
         flash_data = self.dataset
-        
+
         if (x_range is not None):
             flash_x = self.dataset.flash_x.data
             good &= ((flash_x < x_range[1]) & (flash_x > x_range[0]))
@@ -267,10 +267,10 @@ class GLMDataset(OneToManyTraversal):
             flash_y = self.dataset.flash_y.data
             good &= ((flash_y < y_range[1]) & (flash_y > y_range[0]))
         if lon_range is not None:
-            good &= ((flash_data.flash_lon < lon_range[1]) & 
+            good &= ((flash_data.flash_lon < lon_range[1]) &
                      (flash_data.flash_lon > lon_range[0])).data
         if lat_range is not None:
-            good &= ((flash_data.flash_lat < lat_range[1]) & 
+            good &= ((flash_data.flash_lat < lat_range[1]) &
                      (flash_data.flash_lat > lat_range[0])).data
         if min_events is not None:
             good &= (flash_data.flash_child_event_count >= min_events).data
@@ -279,7 +279,7 @@ class GLMDataset(OneToManyTraversal):
 
         flash_ids = flash_data.flash_id[good].data
         return self.get_flashes(flash_ids)
-    
+
     def get_flashes(self, flash_ids):
         """ Subset the dataset to a some flashes with ids given by a list of
             flash_ids. Can be used to retrieve a single flash by passing a
@@ -326,7 +326,7 @@ def get_lutevents(dataset, scale_factor=28e-6, event_dim='number_of_events',
 
         Returns a new dataset with dimension "lutevent_id", having an index of the same
         name. The dataset is a (shallow) copy, but a new xarray object
-        
+
         If needed, returned dataset lutevents can be added to the original dataset with
         dataset.update(lutevents).
 
@@ -346,9 +346,17 @@ def get_lutevents(dataset, scale_factor=28e-6, event_dim='number_of_events',
             (default -/+.31 radians, which is larger than the
             full disk at geo. Ref: GOES-R PUG Vol. 3, L1b data.)
     """
+    # Make a copy of the dataset so we can update it and return a copy.
+    # xarray copys are shallow/cheap, and the xarray docs promote returning new
+    # datasets http://xarray.pydata.org/en/stable/combining.html
     dataset = dataset.copy()
     event_x, event_y = dataset.event_x.data, dataset.event_y.data
     event_energy = dataset.event_energy.data
+    product_time = dataset.product_time.data
+    ev_flash_id = dataset.event_parent_flash_id.data
+    ev_group_id = dataset.event_parent_group_id.data
+    flash_area = dataset.flash_area.data
+    group_area = dataset.group_area.data
 
     xy_id = discretize_2d_location(event_x, event_y, scale_factor, x_range, y_range)
     dataset['event_parent_lutevent_id'] = xr.DataArray(xy_id, dims=[event_dim,])
@@ -357,16 +365,46 @@ def get_lutevents(dataset, scale_factor=28e-6, event_dim='number_of_events',
 
     # Create a new dimension for the reduced set of events, with their
     # properties aggregated.
-    # - Sum: event_energy
+    # - Sum: event_energy, flash_area, group_area
     # - Mean: event_x, event_y
+    # - Count: event_id; unique flash_id, group_id
     eventlut_dtype = [('lutevent_id', 'u8'),
                       ('lutevent_x', 'f8'),
                       ('lutevent_y', 'f8'),
                       ('lutevent_energy','f8'),
-                      ('lutevent_count', 'u4'),]
-    lut_iter = ((xy_id, event_x[evids].mean(), event_y[evids].mean(),
-                 event_energy[evids].sum(), len(evids))
-                 for xy_id, evids in eventlut_groups.groups.items())
+                      ('lutevent_count', 'f4'),
+                      ('lutevent_flash_count', 'f4'),
+                      ('lutevent_group_count', 'f4'),
+                      ('lutevent_total_flash_area', 'f8'),
+                      ('lutevent_total_group_area', 'f8'),
+                      ('lutevent_time_offset', '<M8[ns]')
+                      ]
+    def event_lut_iter(event_lut_groupby, flash_groupby, group_groupby):
+        flash_groups = flash_groupby.groups
+        group_groups = group_groupby.groups
+        for xy_id, evids in event_lut_groupby.groups.items():
+            flash_ids = np.unique(ev_flash_id[evids])
+            group_ids = np.unique(ev_group_id[evids])
+            flash_count, group_count = len(flash_ids), len(group_ids)
+            total_flash_area = sum((flash_area[flash_groups[fid]].sum()
+                for fid in flash_ids))
+            total_group_area = sum((group_area[group_groups[gid]].sum()
+                for gid in group_ids))
+            yield (xy_id,
+                   event_x[evids].mean(),
+                   event_y[evids].mean(),
+                   event_energy[evids].sum(),
+                   len(evids),
+                   flash_count,
+                   group_count,
+                   total_flash_area,
+                   total_group_area,
+                   product_time
+                   )
+
+    lut_iter = event_lut_iter(eventlut_groups,
+                              dataset.groupby('flash_id'),
+                              dataset.groupby('group_id'))
     event_lut = np.fromiter(lut_iter, dtype=eventlut_dtype, count=n_lutevents)
     lutevents = xr.Dataset.from_dataframe(
                     pd.DataFrame(event_lut).set_index('lutevent_id'))
