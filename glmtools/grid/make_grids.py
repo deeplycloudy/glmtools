@@ -326,6 +326,17 @@ class GLMGridder(FlashGridder):
                             'Average group area',
                             )
 
+        # In some use cases, it's easier to calculate totals (for area or
+        # energy) and then divide at the end. This dictionary maps numerator
+        # to denominator, with an index corresponding to self.outgrids.
+        # The avearge is then calculated on output with numerator_out =
+        # numerator/denominator. For example to calculate average energy
+        # instead of total energy:
+        #    self.divide_grids[6]=0
+        # and change the labels in field_names, etc. to read as averages
+        # instead of totals.
+        self.divide_grids = {}
+
         self.field_units = (
             density_label,
             density_label,
@@ -435,7 +446,7 @@ class GLMlutGridder(GLMGridder):
 
         framer = flashes_to_frames(self.t_edges_seconds, all_frames,
                      time_key='time', time_edges_datetime=self.t_edges,
-                     flash_counter=frame_count_log)
+                     flash_counter=frame_count_log, do_events='time')
 
         outgrids = (event_density_grid, total_energy_grid)
         return outgrids, framer
@@ -476,7 +487,7 @@ class GLMlutGridder(GLMGridder):
             accum_extent_density = accumulate_energy_on_grid(
                 extent_density_grid[:,:,i], xedge, yedge,
                 label='flash extent', grid_frac_weights=False)
-            accum_footprint      = accumulate_points_on_grid(
+            accum_footprint      = accumulate_energy_on_grid(
                 footprint_grid[:,:,i], xedge, yedge,
                 label='flash area', grid_frac_weights=False)
 
@@ -502,7 +513,7 @@ class GLMlutGridder(GLMGridder):
 
         framer = flashes_to_frames(self.t_edges_seconds, all_frames,
                      time_key='start', time_edges_datetime=self.t_edges,
-                     flash_counter=frame_count_log)
+                     flash_counter=frame_count_log, do_events='time')
 
         outgrids = (init_density_grid, extent_density_grid,
             footprint_grid,
@@ -545,7 +556,7 @@ class GLMlutGridder(GLMGridder):
             accum_extent_density = accumulate_energy_on_grid(
                 extent_density_grid[:,:,i], xedge, yedge,
                 label='group extent', grid_frac_weights=False)
-            accum_footprint      = accumulate_points_on_grid(
+            accum_footprint      = accumulate_energy_on_grid(
                 footprint_grid[:,:,i], xedge, yedge,
                 label='group area', grid_frac_weights=False)
 
@@ -571,12 +582,35 @@ class GLMlutGridder(GLMGridder):
 
         framer = flashes_to_frames(self.t_edges_seconds, all_frames,
                      time_key='start', time_edges_datetime=self.t_edges,
-                     flash_counter=frame_count_log)
+                     flash_counter=frame_count_log, do_events='time')
 
         outgrids = (init_density_grid, extent_density_grid,
             footprint_grid,
             )
         return outgrids, framer
+
+    def output_setup(self, *args, **kwargs):
+        super(GLMlutGridder, self).output_setup(*args, **kwargs)
+        # In the LUT gridding we calculate totals for area and then divide at
+        # the end. This dictionary maps numerator
+        # to denominator, with an index corresponding to self.outgrids.
+        # The avearge is then calculated on output with numerator_out =
+        # numerator/denominator just before the grid is written.
+        log.info('Setting up to divide area grids by extent density grids')
+        # self.field_names = ('flash_extent_density', 0
+        #                'flash_centroid_density', 1
+        #                'event_density', 2
+        #                'average_flash_area', 3
+        #                # 'standard_deviation_flash_area',
+        #                'total_energy', 4
+        #                'group_extent_density', 5
+        #                'group_centroid_density', 6
+        #                'average_group_area', 7
+        #                )
+
+        self.divide_grids[3]=0
+        self.divide_grids[7]=5
+
 
 
 def subdivide_bnd(bnd, delta, s=8):
@@ -823,7 +857,10 @@ def proc_each_grid(subgrid, start_time=None, end_time=None, GLM_filenames=None):
 
     # These should all be independent at this point and can parallelize
     log.info(('gridder kwargs for subgrid {0} are'.format(subgridij), kwargsij))
-    gridder = GLMlutGridder(start_time, end_time, **kwargsij)
+    if 'clip_events' in process_flash_kwargs_ij:
+        gridder = GLMlutGridder(start_time, end_time, **kwargsij)
+    else:
+        gridder = GLMGridder(start_time, end_time, **kwargsij)
 
     if 'clip_events' in process_flash_kwargs_ij:
         xedge,yedge=np.meshgrid(gridder.xedge,gridder.yedge)

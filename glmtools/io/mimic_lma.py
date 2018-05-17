@@ -91,14 +91,15 @@ def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
         log.info("Grabbing chunk {0} of {2} for file {1}".format(ichunk+1, glm._filename, n_chunks))
         flash_chunks.append(glm.get_flashes(id_chunk))
 
-    chunk_func = partial(fast_fixed_grid_read_chunk, target=target, base_date=base_date,
-                         nadir_lon=nadir_lon, clip_events=clip_events,
-                         corner_pickle=corner_pickle)
-
-    # chunk_func = partial(read_flash_chunk, glm=glm, target=target, base_date=base_date,
-    #                      nadir_lon=nadir_lon, fixed_grid=fixed_grid,
-    #                      clip_events=clip_events,
-    #                      corner_pickle=corner_pickle)
+    if clip_events:
+        chunk_func = partial(fast_fixed_grid_read_chunk, target=target, base_date=base_date,
+                             nadir_lon=nadir_lon, clip_events=clip_events,
+                             corner_pickle=corner_pickle)
+    else:
+        chunk_func = partial(read_flash_chunk, glm=glm, target=target, base_date=base_date,
+                             nadir_lon=nadir_lon, fixed_grid=fixed_grid,
+                             clip_events=clip_events,
+                             corner_pickle=corner_pickle)
 
     # # This doesn't work because we can't pickle the targets - they're generators
     # pool = ProcessPoolExecutor(max_workers=4)
