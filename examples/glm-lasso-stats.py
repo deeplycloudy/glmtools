@@ -103,8 +103,8 @@ from glmtools.io.mimic_lma import TimeSeriesGLMPolygonFlashSubset
 # =====
 polys, t_edges_polys = read_poly_log_file(polylog)
 
-all_poly_lons =  np.asarray(polys)[:,:,0]
-all_poly_lats =  np.asarray(polys)[:,:,1]
+all_poly_lons = np.hstack([np.asarray(p)[:,0].flatten() for p in polys])
+all_poly_lats = np.hstack([np.asarray(p)[:,1].flatten() for p in polys])
 lonmin, lonmax = all_poly_lons.min(), all_poly_lons.max() 
 latmin, latmax = all_poly_lats.min(), all_poly_lats.max() 
 
