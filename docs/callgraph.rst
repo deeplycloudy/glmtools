@@ -23,47 +23,39 @@ that processing might be parallelized through tiling).
 
 Each call to ``proc_each_grid`` does the following:
 
-1. creates one ``glmtools.grid.make_grids.GLMGridder`` instance. It creates the lmatools processing pipeline and knows how to read, clip, write the data.
+1. creates one ``glmtools.grid.make_grids.GLMlutGridder`` instance. It creates the lmatools processing pipeline and knows how to read, clip, write the data. ``GLMlutGridder`` subclasses from GLMGridder to set up a pipeline that accounts for the pre-accumulation that will happen in ``fast_fixed_grid_read_chunk``.
 2. creates one ``glmtools.grid.clipping.QuadMeshSubset`` instance for that grid, which is used to find the target grid cells that correspond to each event, group, or flash polygon.
 3. creates an ``glmtools.io.glm.GLMDataset`` instance for each data file and sends that through the processing pipeline by calling the ``GLMGridder.process_flashes`` method for each ``GLMDataset`` instance. ``process_flashes`` calls ``glmtools.io.mimic_lma.read_flashes`` to do most of the work.
 
-After reading the data within the target grid (``glmtools.io.glm.GLMDataset.subset_flashes``), bundles of flashes are processed by ``glmtools.io.mimic_lma.read_flash_chunk``. This is the function that drives most of the expensive work. Here's what happens, per the docstring for ``read_flash_chunk``:
+After reading the data within the target grid (``glmtools.io.glm.GLMDataset.subset_flashes``), bundles of flashes are processed by ``glmtools.io.mimic_lma.fast_fixed_grid_read_chunk``. This is the function that drives most of the expensive work. Here's what happens, per the docstring for ``fast_fixed_grid_read_chunk``:
 
+``glmtools.io.glm.get_lutevents`` is called on flash_data to pre-aggregate the group and flash properties to a discretized event location.
+Thereafter, the following steps take place:
 0. GLM data are renavigated to the GLM fixed grid and the lightning ellipse removed.
-1. GLM event polygons are reconstructed from a corner point lookup table. 
-2. The events for each group (flash) are joined into polygons for each group (flash).
-3. Split the event polygons by the target grid
-4. Split the group polygons by the target grid
-5. Split the flash polygons by the target grid
-6. For each of the split polygons, calculate its centroid, area, fraction of the original polygon area, and fraction of the target grid cell covered
-7. Create numpy arrays with named dtype (i.e., data table with named columns) for (child, parent) pairs at the event, group, and flash levels. See the documentation for mimic_lma_dataset.
-8. Send these data to the target, or return them directly if target is None.
+1. GLM event polygons are reconstructed from a corner point lookup table.
+2. The GLM event polygons are split by the target grid
+3. For each of the split polygons, calculate its centroid, area, fraction of the original polygon area, and fraction of the target grid cell covered
+4. For each split polygon, replicate and weight the pre-accumulated flash, group, and event data
+5. Create numpy arrays with named dtype (i.e., data table with named columns) for (child, parent) pairs at the event, group, and flash levels. See the documentation for mimic_lma_dataset_lut.
+6. Send these data to the target, or return them directly if target is None.
 
-Step 0 uses ``glmtools.io.lightning_ellipse.ltg_ellps_lon_lat_to_fixed_grid``. Step 1 uses routines in ``glmtools.io.ccd``. Step 2 uses routines in ``glmtools.io.clipping``
-Steps 3-5 use ``glmtools.grid.clipping.QuadMeshPolySlicer.slice``, which also uses ``glmtools.io.clipping``. Step 6 makes use of functions in ``glmtools.grid.split_events``. Step 7 uses routines within ``glmtools.io.mimic_lma.mimic_lma_dataset``. Step 8 uses the ``lmatools`` weighted parent/child point accumulation pipeline set up by ``glmtools.grid.make_grids.GLMGridder``.
+Step 0 uses ``glmtools.io.lightning_ellipse.ltg_ellps_lon_lat_to_fixed_grid``. Step 1 uses routines in ``glmtools.io.ccd``. Steps 2 and 4 use routines in ``glmtools.io.clipping`` and ``glmtools.grid.clipping.QuadMeshPolySlicer.slice``, which also uses ``glmtools.io.clipping``. Step 3 makes use of functions in ``glmtools.grid.split_events``. Step 5 uses routines within ``glmtools.io.mimic_lma.mimic_lma_dataset``. Step 6 uses the ``lmatools`` weighted parent/child point accumulation pipeline set up by ``glmtools.grid.make_grids.GLMlutGridder``.
+
+By pre-accumulating at the event level, it is not necessary to consider group and flash polygons individually.
 
 Optimization methods
 --------------------
 
-The number of events is the primary limit to performance, and there are many events per group and very many event per flash. Each event must be clipped against the underlying grid.
+The number of events is the primary limit to performance, and there are many events per group and very many events per flash. Each event must be clipped against the underlying grid.
 
 At the moment, the chief optimization methods employed have been to:
 1. parallelize clipping into subprocesses
 2. send limited bundles of parent/child data at once to lmatools (nonlinear scaling of extent density calculation, I suspect) - i.e., several calls to ``read_flash_chunk`` per GLM file.
 3. limit the size of the target grid, saving on total data volume as well as quadrilateral lookup costs. This is not used at the moment. The implementation is buggy near the subgrid edges, and doesn't solve the problem of one very high rate storm within a grid box.
+4. Pre-accumulate at the event level, which avoids the need to consider group and flash polygons individually
+5. Discretize the event locations, which has the effect of caching the clipping operations because only (approximately) one event location is needed per GLM pixel.
 
-Other options that have been floated are:
-1. Cache results of clipping
-2. Pre-accumulate the event properties to reduce the total number of events
-
-We initially didn't do any caching, because the assumption was the platform might move. Statistics since have shown that the platform is stable enough to result in much less than 2 km of wobble within one minute.
-
-This should lead to tremendous savings on steps 3 and 6 above for storms with very high event rates.
-
-If we were to add the hash as a column to the xarray dataset, then we could use groupby to aggregate the total energy and count for each unique event location, thereby also reducing the total number of events processed in steps 7 and 8.
-
-Draft plan:
-After calculating fixed grid coords with ``ltg_ellps_lon_lat_to_fixed_grid``, assume that events don't move within a minute, and so create a hash of event locations, choosing a suitable rounding amount - perhaps 28 microrad. We then use the hashed exact location and associated clipped polygons to skip unneeded clipping and pre-accumulate, creating a master aggregate event (and associated clipped polygons) for each GLM file, which is then sent to lmatools like normal.
+We initially didn't do any caching, because the assumption was the platform might move. Statistics since have shown that the platform is stable enough to result in much less than 2 km of wobble within one minute. This leads to tremendous savings for storms with very high event rates.
 
 
 Generation of a call graph graphic

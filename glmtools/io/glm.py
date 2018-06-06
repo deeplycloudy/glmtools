@@ -320,19 +320,28 @@ class GLMDataset(OneToManyTraversal):
 
 def get_lutevents(dataset, scale_factor=28e-6, event_dim='number_of_events',
         x_range=(-0.31, 0.31), y_range=(-0.31, 0.31)):
-    """ Build an event lookup table. Assign each event location a "sort of" pixel ID
-        based on its fixed grid coordinates, discretized to some step interval that is
-        less than the minimum pixel spacing of 224 microrad=8 km at nadir.
+    """ Build an event lookup table. Assign each event location a "sort of"
+        pixel ID based on its fixed grid coordinates, discretized to some step
+        interval that is less than the minimum pixel spacing of 224 microrad=8
+        km at nadir.
 
-        Returns a new dataset with dimension "lutevent_id", having an index of the same
-        name. The dataset is a (shallow) copy, but a new xarray object
+        A new location is assigned to each discretized location (mean of the
+        locations of  the constituent events). The time is assigned, uniformly,
+        to be the dataset's product time attribute.
 
-        If needed, returned dataset lutevents can be added to the original dataset with
-        dataset.update(lutevents).
+        The event lookup table is accompanied by pre-accumulated data at each
+        discretized location: the flash, group and event counts; total flash and
+        group areas; total event energy.
 
-        If the pixel ID were stored as a 32 bit unsigned integer, (0 to 4294967295)
-        that is 65536 unique values for a square (x,y) grid, the minimum safe scale
-        factor for the span of the full disk is
+        Returns a new dataset with dimension "lutevent_id", having an index of
+        the same name. The dataset is a (shallow) copy, but a new xarray object.
+
+        If needed, returned dataset lutevents can be added to the original
+        dataset with dataset.update(lutevents).
+
+        If the pixel ID were stored as a 32 bit unsigned integer,
+        (0 to 4294967295) that is 65536 unique values for a square (x,y) grid,
+        the minimum safe scale factor for the span of the full disk is
         (0.62e6 microradians)/65536 = 9.46 microradians
         which is a bit large. Therefore, the implementation uses 64 bit unsigned
         integers to be safe.

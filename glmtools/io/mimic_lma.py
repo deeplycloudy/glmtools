@@ -113,13 +113,14 @@ def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
 
 def fast_fixed_grid_read_chunk(flash_data, target=None, base_date=None, nadir_lon=None,
          clip_events=True, corner_pickle=None):
-    """ For the chunk of GLM data in flash_data, prepare a dataset that can be sent
-    to lmatools for accumulation on a target grid.
+    """ For the chunk of GLM data in flash_data, prepare a dataset that can be
+    sent to lmatools for accumulation on a target grid.
 
-    Assumes that we're running in the full-quality mode, using both clip_events and
-    fixed_grid, and that flash_data includes pre-aggregated group and flash properties
-    that have made use of the event lookup table pre-optimization.
-    The following steps take place:
+    Assumes that we're running in the full-quality mode, using both clip_events
+    and fixed_grid. ``glmtools.io.glm.get_lutevents`` is called on flash_data to
+    pre-aggregate the group and flash properties to a discretized event
+    location.
+    Thereafter, the following steps take place:
     1. GLM event polygons are reconstructed from a corner point lookup table.
     2. The GLM event polygons are split by the target grid
     3. For each of the split polygons, calculate its centroid, area, fraction of
