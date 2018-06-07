@@ -1006,7 +1006,9 @@ class GLMncCollection(LMAh5Collection):
                                 lon_range=self.lon_range,
                                 lat_range=self.lat_range,
                                 clip_events=False)
-        events, flashes = fake_lma['flash']
+        ev_chunks = (d['flash'][0] for d in fake_lma)
+        fl_chunks = (d['flash'][0] for d in fake_lma)
+        events, flashes = np.hstack(ev_chunks), np.hstack(fl_chunks)
         log.info('data from {0}'.format(fname))
         return events, flashes
 
