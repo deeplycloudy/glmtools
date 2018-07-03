@@ -17,7 +17,7 @@ Installation
 ============
 
 glmtools requires ``Python >= 3.5``, ``numpy``, ``scipy``, ``netCDF4``, and
-``xarray >= 0.97``. That version of ``xarray`` is the first to support automatic
+``xarray >= 0.9.7``. That version of ``xarray`` is the first to support automatic
 decoding of the ``_Unsigned`` integer data that is used throughout the GLM
 NetCDF files. ``matplotlib`` is used for plotting. Gridding and flash statistics
 are built on top of ``lmatools``.
