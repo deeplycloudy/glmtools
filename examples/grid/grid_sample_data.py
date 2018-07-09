@@ -57,5 +57,8 @@ def test_grid_sample_data():
         gridder(glm_filenames, start_time, end_time, **grid_kwargs)
                 
         for entry in os.scandir(os.path.join(tmpdirname, *resulting_date_path)):
-            assert output_sizes[entry.name] == entry.stat().st_size
+            target = output_sizes[entry.name]
+            actual = entry.stat().st_size
+            percent = 20
+            assert  np.abs(target-actual) < int(target*percent/100) 
             # print(entry.name, entry.stat().st_size)
