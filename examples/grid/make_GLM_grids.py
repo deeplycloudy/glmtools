@@ -16,10 +16,10 @@ def create_parser():
     parser.add_argument(dest='filenames',metavar='filename', nargs='*')
     parser.add_argument('-o', '--output_dir', metavar='directory',
                         required=True, dest='outdir', action='store', )
-    parser.add_argument('--ctr_lat', metavar='latitude', required=True,
+    parser.add_argument('--ctr_lat', metavar='latitude', required=False,
                         dest='ctr_lat', action='store', type=float,
                         help='center latitude')
-    parser.add_argument('--ctr_lon', metavar='longitude', required=True,
+    parser.add_argument('--ctr_lon', metavar='longitude', required=False,
                         dest='ctr_lon', action='store', type=float,
                         help='center longitude')
     parser.add_argument('--start', metavar='yyyy-mm-ddThh:mm:ss',
@@ -112,6 +112,17 @@ logging.basicConfig(handlers = [logoutfile],
 log = logging.getLogger(__name__)
 log.info("Starting GLM Gridding")
 
+def nearest_resolution(args):
+    """ Uses args.dx to find the closest resolution specified by the
+    GOES-R PUG. Returns something like "10.0km" that can be used as the
+    resolution argument to get_GOESR_grid.
+    """
+    goes_resln_options = np.asarray([0.5, 1.0, 2.0, 4.0, 8.0, 10.0])
+    resln_idx = np.argmin(np.abs(goes_resln_options - args.dx))
+    closest_resln = goes_resln_options[resln_idx]
+    resln = '{0:4.1f}km'.format(closest_resln).replace(' ', '')
+    return resln
+
 def grid_setup(args):
     from lmatools.grid.make_grids import write_cf_netcdf_latlon, write_cf_netcdf_noproj, write_cf_netcdf_fixedgrid
     from lmatools.grid.make_grids import dlonlat_at_grid_center, grid_h5flashfiles
@@ -167,102 +178,79 @@ def grid_setup(args):
         os.makedirs(outpath)
         # subprocess.call(['chmod', 'a+w', outpath, grid_dir+'/20%s' %(date.strftime('%y/%b')), grid_dir+'/20%s' %(date.strftime('%y'))])
 
-    # center_ID='WTLMA'
-    ctr_lat = float(args.ctr_lat)
-    ctr_lon = float(args.ctr_lon)
-    dx_km=float(args.dx)*1.0e3
-    dy_km=float(args.dy)*1.0e3
-    width, height = 1000.0*float(args.width), 1000.0*float(args.height)
-    x_bnd_km = (-width/2.0, width/2.0)
-    y_bnd_km = (-height/2.0, height/2.0)
-    frame_interval = float(args.dt)
-
-    dx, dy, x_bnd, y_bnd = dlonlat_at_grid_center(ctr_lat, ctr_lon, 
-                                dx=dx_km, dy=dy_km,
-                                x_bnd = x_bnd_km, y_bnd = y_bnd_km )
-    # lon lat tuples of the corners
-    corners = np.vstack([(x_bnd[0], y_bnd[0]), (x_bnd[0], y_bnd[1]), 
-                         (x_bnd[1], y_bnd[1]), (x_bnd[1], y_bnd[0])])
-    # print(x_bnd, y_bnd)
-
-    # Default
-    proj_name='latlong'
-    output_writer = write_cf_netcdf_latlon
-
-    # Old support for a direct lon/lat to fixed grid lookup table. Unused
-    # at the moment.
-    pixel_grid = None
-    if pixel_grid is not None:
-        from glmtools.io.ccd import load_pixel_lookup
-        from lmatools.coordinateSystems import PixelGrid
-        ccd_lookup_data = load_pixel_lookup(args.fixed_grid)
-        ccd_lookup, ccdX, ccdY, ccd_lons, ccd_lats = ccd_lookup_data
-        ccd_dist, ccd_idx = ccd_lookup.query(corners)
-        corner_ccdX, corner_ccdY = ccdX[ccd_idx], ccdY[ccd_idx]
-        ccd_Xmin, ccd_Ymin = corner_ccdX.min(), corner_ccdY.min()
-        ccd_Xmax, ccd_Ymax = corner_ccdX.max(), corner_ccdY.max()
-        ccd_grid = PixelGrid(ccd_lons, ccd_lats, ccd_lookup, ccdX, ccdY)
-        # if we want indices 1, 2, 3 for min and mix of 1, 3 with dx=1
-        # then in gridder xedge must be .5, 1.5, 2.5, 3.5 to give centers 1,2,3.
-        # Gridder starts at x_bnd[0], so subtract .5
-        # and then goes to x_bnd[1]+dx by dx, so add 1 to get 4
-        # giving np.arange(.5, 4, 1.0) == array([ 0.5,  1.5,  2.5,  3.5])
-        x_bnd = ccd_Xmin-.5, ccd_Xmax+1
-        y_bnd = ccd_Ymin-.5, ccd_Ymax+1
-        dx, dy = 1, 1
-        output_writer = write_cf_netcdf_noproj
-        proj_name='pixel_grid'
-        # ccdsub_lons=lons[ccd_Xmin:ccd_Xmax+1, ccd_Ymin:ccd_Ymax+1]
-        # ccdsub_lats=lats[ccd_Xmin:ccd_Xmax+1, ccd_Ymin:ccd_Ymax+1]
-    # print(x_bnd, y_bnd)
-
     if args.fixed_grid:
         proj_name = 'geos'
+
         if (args.goes_position != 'none') & (args.goes_sector != 'none'):
-            goes_resln_options = np.asarray([0.5, 1.0, 2.0, 4.0, 8.0, 10.0])
-            resln_idx = np.argmin(np.abs(goes_resln_options - args.dx))
-            closest_resln = goes_resln_options[resln_idx]
-            resln = '{0:4.1f}km'.format(closest_resln).replace(' ', '')
+            resln = nearest_resolution(args)
             view = get_GOESR_grid(position=args.goes_position, 
                                   view=args.goes_sector, 
                                   resolution=resln)
             nadir_lon = view['nadir_lon']
             dx = dy = view['resolution']
             nx, ny = view['pixelsEW'], view['pixelsNS']
+            geofixcs, grs80lla = get_GOESR_coordsys(sat_lon_nadir=nadir_lon)
+            
             if 'centerEW' in view:
                 x_ctr, y_ctr = view['centerEW'], view['centerNS']
-            else:
-                # won't be known for mesoscale sectors. 
-                # Assume that it's in ctr_lon, ctr_lat
-                x_ctr, y_ctr = ctr_lon, ctr_lat
-            x_bnd = (np.arange(nx, dtype='float') - nx/2.0)*dx + x_ctr + 0.5*dx
-            y_bnd = (np.arange(ny, dtype='float') - ny/2.0)*dy + y_ctr + 0.5*dy
-            x_bnd = np.asarray([x_bnd.min(), x_bnd.max()])
-            y_bnd = np.asarray([y_bnd.min(), y_bnd.max()])
-        
+            elif args.goes_sector == 'meso':
+                # use ctr_lon, ctr_lat to get the center of the mesoscale FOV
+                x_ctr, y_ctr, z_ctr = geofixcs.fromECEF(
+                    *grs80lla.toECEF(args.ctr_lon, args.ctr_lat, 0.0))
+        elif (args.goes_position != 'none') & (args.goes_sector == 'none'):
+            # Requires goes_position, a center, and a width. Fully flexible
+            # in resolution, i.e., doesn't slave it to one of the GOES-R specs
+            view = get_GOESR_grid(position=args.goes_position, 
+                                  view='full', 
+                                  resolution='1.0km')
+            nadir_lon = view['nadir_lon']
+            dx1km = dy1km = view['resolution']
             geofixcs, grs80lla = get_GOESR_coordsys(sat_lon_nadir=nadir_lon)
-            ctr_lon, ctr_lat, ctr_alt = grs80lla.fromECEF(
-                *geofixcs.toECEF(x_ctr, y_ctr, 0.0))
-            fixed_grid = geofixcs
-            log.debug((x_bnd, y_bnd, dx, dy, nx, ny))
+            x_ctr, y_ctr, z_ctr = geofixcs.fromECEF(
+              *grs80lla.toECEF(args.ctr_lon, args.ctr_lat, 0.0))
+
+            # Convert the specified resolution in km given by args.dx to
+            # a delta in fixed grid coordinates using the 1 km delta from the
+            # GOES-R PUG.
+            dx, dy = args.dx * dx1km, args.dy * dy1km
+            nx, ny = int(args.width/args.dx), int(args.height/args.dy)
         else:
-            dx, dy = args.dx, args.dy
-            nadir_lon = -75.0
-            nx,ny = 1000, 1000
-            x_ctr, y_ctr = args.ctr_lon, args.ctr_lat
-            x_bnd = (np.arange(nx, dtype='float') - nx/2.0)*dx + x_ctr + 0.5*dx
-            y_bnd = (np.arange(ny, dtype='float') - ny/2.0)*dy + y_ctr + 0.5*dy
-            x_bnd = np.asarray([x_bnd.min(), x_bnd.max()])
-            y_bnd = np.asarray([y_bnd.min(), y_bnd.max()])
-            geofixcs, grs80lla = get_GOESR_coordsys(sat_lon_nadir=nadir_lon)
-            ctr_lon, ctr_lat, ctr_alt = grs80lla.fromECEF(
-                *geofixcs.toECEF(x_ctr, y_ctr, 0.0))
-            fixed_grid = geofixcs
-            log.debug((x_bnd, y_bnd, dx, dy, nx, ny))
+            raise ValueError("Gridding on the fixed grid requires "
+                "goes_position and dx. For goes_sector='meso', also specify "
+                "ctr_lon and ctr_lat. Without goes_sector, also include width "
+                "and height.")
+        x_bnd = (np.arange(nx, dtype='float') - nx/2.0)*dx + x_ctr + 0.5*dx
+        y_bnd = (np.arange(ny, dtype='float') - ny/2.0)*dy + y_ctr + 0.5*dy
+        x_bnd = np.asarray([x_bnd.min(), x_bnd.max()])
+        y_bnd = np.asarray([y_bnd.min(), y_bnd.max()])
         
+        geofixcs, grs80lla = get_GOESR_coordsys(sat_lon_nadir=nadir_lon)
+        ctr_lon, ctr_lat, ctr_alt = grs80lla.fromECEF(
+            *geofixcs.toECEF(x_ctr, y_ctr, 0.0))
+        fixed_grid = geofixcs
+        log.debug((x_bnd, y_bnd, dx, dy, nx, ny))
+
         output_writer = partial(write_cf_netcdf_fixedgrid, nadir_lon=nadir_lon)
-        
-        
+    else:
+        # Default
+        proj_name='latlong'
+        output_writer = write_cf_netcdf_latlon
+        ctr_lat = float(args.ctr_lat)
+        ctr_lon = float(args.ctr_lon)
+        dx_km=float(args.dx)*1.0e3
+        dy_km=float(args.dy)*1.0e3
+        width, height = 1000.0*float(args.width), 1000.0*float(args.height)
+        x_bnd_km = (-width/2.0, width/2.0)
+        y_bnd_km = (-height/2.0, height/2.0)
+        dx, dy, x_bnd, y_bnd = dlonlat_at_grid_center(ctr_lat, ctr_lon, 
+                                    dx=dx_km, dy=dy_km,
+                                    x_bnd = x_bnd_km, y_bnd = y_bnd_km )
+
+    # tuples of the corners
+    corners = np.vstack([(x_bnd[0], y_bnd[0]), (x_bnd[0], y_bnd[1]), 
+                         (x_bnd[1], y_bnd[1]), (x_bnd[1], y_bnd[0])])
+    # print(x_bnd, y_bnd)
+
     if args.is_lma:
         gridder = grid_h5flashfiles
         output_filename_prefix='LMA'
@@ -272,7 +260,7 @@ def grid_setup(args):
 
     grid_kwargs=dict(proj_name=proj_name,
             base_date = date, do_3d=False,
-            dx=dx, dy=dy, frame_interval=frame_interval,
+            dx=dx, dy=dy, frame_interval=float(args.dt),
             x_bnd=x_bnd, y_bnd=y_bnd, 
             ctr_lat=ctr_lat, ctr_lon=ctr_lon, outpath = outpath,
             min_points_per_flash = min_events,
