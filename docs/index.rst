@@ -72,7 +72,9 @@ Get some GLM data, and check it for sanity
 
 The GLM Level 2 data can be obtained from a GOES Rebroadcast feed, an LDM or THREDDS
 service, the Amazon S3 bucket that is part of the NOAA Big Data Project or perhaps other
-sources. These files are in NetCDF 4 format, and begin with ``OR_GLM-L2-LCFA_G16``.
+sources. These files are in NetCDF 4 format, and begin with ``OR_GLM-L2-LCFA``.
+
+Three sample data files are included in ``glmtools/test/data``.
 
 Early preliminary and non-operational data had some internal inconsistencies that prevent
 further use with glmtools. Before undertaking further processing, it is recommended that
@@ -92,37 +94,50 @@ Grid the GLM data
 
 The script ``examples/grid/make_GLM_grids.py`` is a command line utility; run with ``--help`` for usage. 
 
-For instance, the following command will grid one minute of data (3 GLM files) on the ABI
-fixed grid in the CONUS sector at 2 km resolution. These images will overlay precisely on
-the ABI cloud tops, and will have parallax with respect to ground for all the same
-reasons ABI does.
+For instance, the following command, using the included sample data will grid
+one minute of data (3 GLM files) on the ABI fixed grid in the CONUS sector at 2
+km resolution. These images will overlay precisely on the ABI cloud tops, and
+will have parallax with respect to ground for all the same reasons ABI does.
 
 .. code-block:: bash
 
-   python make_GLM_grids.py -o /path/to/output/ --fixed_grid --split_events \
-   --goes_position east --goes_sector conus --dx=2.0 --dy=2.0 --ctr_lon 0.0 --ctr_lat 0.0 \
-   --start=2018-01-04T05:37:00 --end=2018-01-04T05:38:00 \
-   OR_GLM-L2-LCFA_G16_s20180040537000_e20180040537200_c20180040537226.nc \
-   OR_GLM-L2-LCFA_G16_s20180040537200_e20180040537400_c20180040537419.nc \
-   OR_GLM-L2-LCFA_G16_s20180040537400_e20180040538000_c20180040538022.nc \
+    python make_GLM_grids.py -o /path/to/output/ 
+    --fixed_grid --split_events \
+    --goes_position east --goes_sector conus \
+    --dx=2.0 --dy=2.0 \
+    OR_GLM-L2-LCFA_G16_s20181830433000_e20181830433200_c20181830433231.nc \
+    OR_GLM-L2-LCFA_G16_s20181830433200_e20181830433400_c20181830433424.nc \
+    OR_GLM-L2-LCFA_G16_s20181830433400_e20181830434000_c20181830434029.nc \
 
-To start with, look at the flash extent density and total energy grids.
 
-`ctr_lon` and `ctr_lat` aren't used, but are required anyway. Fixing this would
-make a nice first contribution!
+If you don't need the whole conus sector, you can instead plot on a mesoscale domain centered at an arbitrary point. This will be about 1000 x 1000 km, same as the ABI fixed grid meso sector.
 
-Removing the --split_events flag and setting the grid to 10 km allows for gridding
-of the raw point data, and will run much faster. Finer resolutions will cause gaps in
-flash extent density because the point data are spaced about 8-12 km apart.
-Note that these grids will either have gaps or will double-count events along
-GLM pixel borders, because there is no one grid resolution which exactly
-matches the GLM pixel size as it varies with earth distortion over the field
-of view.
+.. code-block:: bash
 
-The same script can be used to grid LMA data on the same grid by adding the ``--lma``
-flag. This step requires LMA HDF5 files containing flash-sorted data as produced by
-lmatools.
+    python make_GLM_grids.py -o /path/to/output/
+    --fixed_grid --split_events \
+    --goes_position east --goes_sector meso \
+    --dx=2.0 --dy=2.0 \
+    --ctr_lon=-101.5 --ctr_lat=33.5 \
+    OR_GLM-L2-LCFA_G16_s20181830433000_e20181830433200_c20181830433231.nc \
+    OR_GLM-L2-LCFA_G16_s20181830433200_e20181830433400_c20181830433424.nc \
+    OR_GLM-L2-LCFA_G16_s20181830433400_e20181830434000_c20181830434029.nc \
+    
+Finally, if you want a fully custom grid size, you can omit the ``--goes_sector`` argument and specify a width and height in kilometers.
 
+.. code-block:: bash
+
+    python make_GLM_grids.py -o /path/to/output/
+    --fixed_grid --split_events \
+    --goes_position east --goes_sector conus \
+    --dx=2.0 --dy=2.0 "--width=1000.0", "--height=500.0" \
+    --ctr_lon=0.0 --ctr_lat=0.0 \
+    OR_GLM-L2-LCFA_G16_s20181830433000_e20181830433200_c20181830433231.nc \
+    OR_GLM-L2-LCFA_G16_s20181830433200_e20181830433400_c20181830433424.nc \
+    OR_GLM-L2-LCFA_G16_s20181830433400_e20181830434000_c20181830434029.nc \
+
+
+The notebook ``examples/plot_glm_test_data.ipynb`` runs the meso sector example in a temporary directory, and also shows how to plot the resulting grids on a map. In the examples above, the start and end time of the grids was inferred from the filenames, but the notebook also shows how to grid 1 min of data to a file containing 5, 1-min frames, all but one of which will be empty.
 
 Calculate time series flash rate data 
 ------------------------------------- 
