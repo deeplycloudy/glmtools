@@ -1,4 +1,26 @@
+from datetime import datetime
 import numpy as np
+
+def ltg_ellps_radii(date):
+    """
+    Given a date, return the equatorial and polar radii of the lightning
+    ellipsoid. The ellipsoid was tuned after launch based on comparison of the
+    GLM flash centroids to ground strike locations.
+    
+    date: datetime object for the date and time of observation
+    
+    Returns: re_ltg_ellps, rp_ltg_ellps (meters): equatorial and polar radii
+        of the lightning ellipsoid, respectively.
+    """
+    if date < datetime(2018,12,31):
+        re_ltg_ellps, rp_ltg_ellps = 6.394140e6, 6.362755e6
+    else:
+        # The GRS80 altitude + 6 km differs by about 3 m from the value above
+        # which is the exact that was provided at the time of launch. Use the
+        # original value instead of doing the math.
+        # 6.35675231414e6+6.0e3
+        re_ltg_ellps, rp_ltg_ellps = 6.378137e6 + 14.0e3, 6.362755e6
+    return re_ltg_ellps, rp_ltg_ellps
 
 def ltg_ellps_lon_lat_to_fixed_grid(lon, lat, sat_lon,
         re_ltg_ellps=6.394140e6, rp_ltg_ellps = 6.362755e6,
