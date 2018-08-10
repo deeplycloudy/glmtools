@@ -297,18 +297,25 @@ class GLMDataset(OneToManyTraversal):
             event_x, event_y, group_x, group_y, flash_x, flash_y
         """
         nadir_lon = self.dataset.lon_field_of_view.data
+        pt = self.dataset.product_time.dt
+        date = datetime(pt.year, pt.month, pt.day,
+                        pt.hour, pt.minute, pt.second)
+
         event_x, event_y = ltg_ellps_lon_lat_to_fixed_grid(
-            self.dataset.event_lon.data, self.dataset.event_lat.data, nadir_lon)
+            self.dataset.event_lon.data, self.dataset.event_lat.data,
+            nadir_lon, date)
         self.dataset['event_x'] = xr.DataArray(event_x, dims=[self.ev_dim,])
         self.dataset['event_y'] = xr.DataArray(event_y, dims=[self.ev_dim,])
 
         group_x, group_y = ltg_ellps_lon_lat_to_fixed_grid(
-            self.dataset.group_lon.data, self.dataset.group_lat.data, nadir_lon)
+            self.dataset.group_lon.data, self.dataset.group_lat.data,
+            nadir_lon, date)
         self.dataset['group_x'] = xr.DataArray(group_x, dims=[self.gr_dim,])
         self.dataset['group_y'] = xr.DataArray(group_y, dims=[self.gr_dim,])
 
         flash_x, flash_y = ltg_ellps_lon_lat_to_fixed_grid(
-            self.dataset.flash_lon.data, self.dataset.flash_lat.data, nadir_lon)
+            self.dataset.flash_lon.data, self.dataset.flash_lat.data,
+            nadir_lon, date)
         self.dataset['flash_x'] = xr.DataArray(flash_x, dims=[self.fl_dim,])
         self.dataset['flash_y'] = xr.DataArray(flash_y, dims=[self.fl_dim,])
 

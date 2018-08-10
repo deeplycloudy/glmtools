@@ -385,13 +385,17 @@ def read_flash_chunk(flash_data, glm=None, target=None, base_date=None, nadir_lo
         # unioning by a little bit to avoid the above problem.
 
         if fixed_grid:
+            pt = flash_data.product_time.dt
+            date = datetime(pt.year, pt.month, pt.day,
+                            pt.hour, pt.minute, pt.second)
+            
             x_lut, y_lut, corner_lut = load_pixel_corner_lookup(corner_pickle)
             # Convert from microradians to radians
             x_lut = x_lut * 1.0e-6
             y_lut = y_lut * 1.0e-6
             corner_lut = corner_lut*1e-6
             event_x, event_y = ltg_ellps_lon_lat_to_fixed_grid(event_lons,
-                event_lats, nadir_lon)
+                event_lats, nadir_lon, date)
             event_polys = quads_from_corner_lookup(x_lut, y_lut, corner_lut,
                 event_x, event_y)
             event_polys_inflated = quads_from_corner_lookup(x_lut, y_lut,

@@ -22,8 +22,7 @@ def ltg_ellps_radii(date):
         re_ltg_ellps, rp_ltg_ellps = 6.378137e6 + 14.0e3, 6.362755e6
     return re_ltg_ellps, rp_ltg_ellps
 
-def ltg_ellps_lon_lat_to_fixed_grid(lon, lat, sat_lon,
-        re_ltg_ellps=6.394140e6, rp_ltg_ellps = 6.362755e6,
+def ltg_ellps_lon_lat_to_fixed_grid(lon, lat, sat_lon, date,
         re_grs80 = 6.378137e6, rp_grs80 = 6.35675231414e6,
         sat_grs80_height=35.786023e6 ):
     """ 
@@ -55,6 +54,8 @@ def ltg_ellps_lon_lat_to_fixed_grid(lon, lat, sat_lon,
         Image navigation and registration for the geostationary lightning 
         mapper (GLM). Proc. SPIE 10004, 100041N, doi: 10.1117/12.2242141.
     """
+    re_ltg_ellps, rp_ltg_ellps = ltg_ellps_radii(date)
+
     ff_ltg_ellps = (re_ltg_ellps - rp_ltg_ellps)/re_ltg_ellps
     ff_grs80 = (re_grs80 - rp_grs80)/re_grs80 # 0.003352810704800 
     sat_H = sat_grs80_height + re_grs80 # 42.164e6 
