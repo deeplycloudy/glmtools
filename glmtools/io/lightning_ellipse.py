@@ -12,7 +12,7 @@ def ltg_ellps_radii(date):
     Returns: re_ltg_ellps, rp_ltg_ellps (meters): equatorial and polar radii
         of the lightning ellipsoid, respectively.
     """
-    if date < datetime(2018,12,31):
+    if date < datetime(2018,10,9):
         re_ltg_ellps, rp_ltg_ellps = 6.394140e6, 6.362755e6
     else:
         # The GRS80 altitude + 6 km differs by about 3 m from the value above
@@ -87,21 +87,3 @@ def ltg_ellps_lon_lat_to_fixed_grid(lon, lat, sat_lon,
     alpha = np.arctan(vz/vx) #* 1e6
     beta = -np.arcsin(vy) #* 1e6
     return beta, alpha
-
-# Values from the GOES-R L1b PUG Vol 3. These are values *without* the lightnign ellipsoid
-# test_lat = 33.846162
-# test_lon = -84.690932
-# test_alt = 0.0
-# test_fixx = -0.024052
-# test_fixy = 0.095340
-# test_fixz = 0.0
-if __name__ == '__main__':    
-    goes_lon = -75.0
-    test_lon = -110., -110., -57., -57.
-    test_lat = 42., -45., 46., -41.
-    fix_testx =  np.asarray((-7.072352765696357, -6.693857076039071,  3.593939139528318,  3.945876828443619))*1e4
-    fix_testy =  np.asarray((1.106891557528977,  -1.163584191758841,  1.199674272612177, -1.105394721298256))*1e5
-
-    fix_x, fix_y = ltg_ellps_lon_lat_to_fixed_grid(test_lon, test_lat, goes_lon)
-    print(fix_x*1e6 - fix_testx)
-    print(fix_y*1e6 - fix_testy)
