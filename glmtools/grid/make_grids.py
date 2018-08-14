@@ -294,13 +294,13 @@ class GLMGridder(FlashGridder):
         density_label = 'Count per ' + density_units + " pixel per "+ time_units
 
         self.outfile_postfixes = ('flash_extent.nc',
-                                  'flash_init.nc',
-                                  'source.nc',
+                                  'flash_centroid.nc',
+                                  'event.nc',
                                   'footprint.nc',
                                   # 'flashsize_std.nc',
                                   'total_energy.nc',
                                   'group_extent.nc',
-                                  'group_init.nc',
+                                  'group_centroid.nc',
                                   'group_area.nc',)
         self.outfile_postfixes_3d = None
 
@@ -316,7 +316,7 @@ class GLMGridder(FlashGridder):
                        )
 
         self.field_descriptions = ('Flash extent density',
-                            'Flash initiation density',
+                            'Flash centroid density',
                             'Event density',
                             'Average flash area',
                             # 'Standard deviation of flash area',
@@ -343,7 +343,7 @@ class GLMGridder(FlashGridder):
             density_label,
             "km^2 per flash",
             # "km^2",
-            "J per flash",
+            "J",
             density_label,
             density_label,
             "km^2 per group",

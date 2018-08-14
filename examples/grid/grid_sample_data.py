@@ -3,6 +3,7 @@ import numpy as np
 import xarray as xr
 from numpy.testing import assert_equal
 
+from glmtools.io.glm import GLMDataset
 from glmtools.test.common import get_sample_data_path
 
 sample_path = get_sample_data_path()
@@ -12,6 +13,18 @@ samples = [
     "OR_GLM-L2-LCFA_G16_s20181830433400_e20181830434000_c20181830434029.nc",
 ]
 samples = [os.path.join(sample_path, s) for s in samples]
+
+def total_energy_in_L2(files, lon_range = (-102.5, -99.5),
+                       lat_range = (31, 35)):
+    # Gather up all flashes over West Texas, which is all flashes in the
+    # mesoscale domain centered on that location at the time of the sample fiels
+    energy = 0.0
+    for sf in files:
+        glm = GLMDataset(sf)
+        flashes_subset = glm.subset_flashes(lon_range = lon_range, 
+                                            lat_range = lat_range)
+        energy += flashes_subset.event_energy.sum().data
+    return energy
 
 
 from make_GLM_grids import create_parser, grid_setup
@@ -63,6 +76,16 @@ def grid_sample_data(grid_spec, output_sizes, dirname=None):
             check = xr.open_dataset(entry.path)
             xr.testing.assert_allclose(valid, check)
             
+            if (('total_energy' in output_sizes) & 
+                ('total_energy' in entry.name)):
+                np.testing.assert_allclose(check.total_energy.sum().data,
+                                           output_sizes['total_energy'],
+                                           rtol=1e-6)
+                # An abundance of caution: validate the valid data, too!
+                np.testing.assert_allclose(valid.total_energy.sum().data,
+                                           output_sizes['total_energy'],
+                                           rtol=1e-6)
+
             # for valid_var, valid_data in valid.variables.items():
             #     check_data = check.variables[valid_var]
             #     assert numpy.all_close(valid_data.data[:], check_data.data[:])
@@ -172,6 +195,7 @@ def test_fixed_grid_meso():
         'GLM-00-00_20180702_043300_60_1src_056urad-dx_group_init.nc':21305,
         'GLM-00-00_20180702_043300_60_1src_056urad-dx_source.nc':26926,
         'GLM-00-00_20180702_043300_60_1src_056urad-dx_total_energy.nc':27501,
+        'total_energy':total_energy_in_L2(samples),
     }
 
     grid_sample_data(grid_spec, output_sizes, dirname='meso')
