@@ -610,7 +610,15 @@ class GLMlutGridder(GLMGridder):
 
         self.divide_grids[3]=0
         self.divide_grids[7]=5
+        
+    def write_grids(self, outpath = '', output_writer = None, 
+                    output_writer_3d = None,
+                    output_filename_prefix = None, output_kwargs={}):
 
+        pad = output_kwargs.pop('pad', None)
+
+        from glmtools.io.imagery import write_goes_imagery
+        write_goes_imagery(self, outpath=outpath, pad=pad)
 
 
 def subdivide_bnd(bnd, delta, s=8):
@@ -726,12 +734,9 @@ class GridOutputPreprocess(object):
         self.pads = pads
         self.outargs=[]
         self.outkwargs=[]
-    def capture_write_call(self, *args, **kwargs):
-        # Use the padding information to trim up the grids
-        log.info("Trimming grids")
+
+    def get_pad_slices(self):
         n_x_pad, n_y_pad, x_pad, y_pad = self.pads
-        x_coord, y_coord = args[3], args[4]
-        grid = args[9]
         if n_x_pad == 0:
             x_slice = slice(None, None)
         else:
@@ -740,11 +745,21 @@ class GridOutputPreprocess(object):
             y_slice = slice(None, None)
         else:
             y_slice = slice(n_y_pad, -n_y_pad)
+        return x_slice, y_slice
+
+    def capture_write_call(self, *args, **kwargs):
+        # Use the padding information to trim up the grids
+        log.info("Trimming grids")
+        x_coord, y_coord = args[3], args[4]
+        grid = args[9]
+        x_slice, y_slice = self.get_pad_slices()
+        
         args = (*args[:3], x_coord[x_slice], y_coord[y_slice], *args[5:9],
                 grid[x_slice, y_slice], *args[10:])
 
         self.outargs.append(args)
         self.outkwargs.append(kwargs)
+
     def write_all(self):
         outfiles = []
         if self.writer:
@@ -851,7 +866,7 @@ def proc_each_grid(subgrid, start_time=None, end_time=None, GLM_filenames=None):
     subgridij, kwargsij, process_flash_kwargs_ij, out_kwargs_ij, pads = subgrid
 
     # Eventually, we want to trim off n_x/y_pad from each side of the grid
-    n_x_pad, n_y_pad, x_pad, y_pad = pads
+    # n_x_pad, n_y_pad, x_pad, y_pad = pads
 
     log.info("out kwargs are", out_kwargs_ij)
 
@@ -887,8 +902,24 @@ def proc_each_grid(subgrid, start_time=None, end_time=None, GLM_filenames=None):
         del glm
 
     preprocess_out = out_kwargs_ij.pop('preprocess_out', None)
-    if preprocess_out:
+    if preprocess_out: # in out_kwargs_ij:
+        if 'output_kwargs' not in out_kwargs_ij:
+            out_kwargs_ij['output_kwargs'] = {}
+        # Used by GLMlutGridder.write_grids, but not the others.
+        out_kwargs_ij['output_kwargs']['pad'] = preprocess_out.get_pad_slices()
+
         output = gridder.write_grids(**out_kwargs_ij)
+        
+        # Two things can happen here. If the lmatools CF NetCDF writer is used
+        # (as it would be when using GLMGridder)
+        # then write_all() is the step that actually does the writing after the
+        # lmatools.FlashGridder.write_grids call is intercepted by the output
+        # preprocessor. The GLMlutGridder, uses the pad slices kwarg
+        # and skips the preprocessor, and just writes directly. write_all() is 
+        # does nothing in the GLMlutGridder case. It would be better
+        # to resolve this inconsistency with a rearchitecture of how the
+        # subgrids are handled - avoiding the hacky output preprocessor in
+        # all cases.
         outfilenames = preprocess_out.write_all()
     else:
         outfilenames = gridder.write_grids(**out_kwargs_ij)
