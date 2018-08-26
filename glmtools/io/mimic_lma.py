@@ -155,6 +155,21 @@ def fast_fixed_grid_read_chunk(flash_data, target=None, base_date=None, nadir_lo
     flash_data = get_lutevents(flash_data)
     geofixcs, grs80lla = get_GOESR_coordsys(sat_lon_nadir=nadir_lon)
 
+    # Calculate the longitude and latitude of the flash and group centroids on
+    # the zero-altitude ellipsoid, removing the lightning ellipse.
+    flash_lon_noellps, flash_lat_noellps, flash_alt_noellps = grs80lla.fromECEF(
+            *geofixcs.toECEF(flash_data.flash_x.data,
+                             flash_data.flash_y.data,
+                             np.zeros_like(flash_data.flash_x.data)))
+    group_lon_noellps, group_lat_noellps, group_alt_noellps = grs80lla.fromECEF(
+            *geofixcs.toECEF(flash_data.group_x.data,
+                             flash_data.group_y.data,
+                             np.zeros_like(flash_data.group_x.data)))
+    flash_data['flash_lon_noellps'] = flash_lon_noellps
+    flash_data['flash_lat_noellps'] = flash_lat_noellps
+    flash_data['group_lon_noellps'] = group_lon_noellps
+    flash_data['group_lat_noellps'] = group_lat_noellps
+
     split_event_dataset=None
     split_group_dataset=None
     split_flash_dataset=None
@@ -845,12 +860,15 @@ def _fake_lma_from_glm_lutflashes(flash_data, basedate):
         # no data, nothing to do
         return flash_np
 
+    flash_lon_noellps = flash_data.flash_lon_noellps.data
+    flash_lat_noellps = flash_data.flash_lat_noellps.data
+
     flash_np['area'] = flash_data.flash_area.data
     flash_np['total_energy'] = flash_data.flash_energy.data
-    flash_np['ctr_lon'] = flash_data.flash_lon.data
-    flash_np['ctr_lat'] = flash_data.flash_lat.data
-    flash_np['init_lon'] = flash_data.flash_lon.data
-    flash_np['init_lat'] = flash_data.flash_lat.data
+    flash_np['ctr_lon'] = flash_lon_noellps
+    flash_np['ctr_lat'] = flash_lat_noellps
+    flash_np['init_lon'] = flash_lon_noellps
+    flash_np['init_lat'] = flash_lat_noellps
     t_start = sec_since_basedate(flash_data.flash_time_offset_of_first_event.data, basedate)
     t_end = sec_since_basedate(flash_data.flash_time_offset_of_last_event.data, basedate)
     flash_np['start'] = t_start
@@ -874,12 +892,15 @@ def _fake_lma_from_glm_lutgroups(flash_data, basedate):
         # no data, nothing to do
         return flash_np
 
+    group_lon_noellps = flash_data.group_lon_noellps.data
+    group_lat_noellps = flash_data.group_lat_noellps.data
+
     flash_np['area'] = flash_data.group_area.data
     flash_np['total_energy'] = flash_data.group_energy.data
-    flash_np['ctr_lon'] = flash_data.group_lon.data
-    flash_np['ctr_lat'] = flash_data.group_lat.data
-    flash_np['init_lon'] = flash_data.group_lon.data
-    flash_np['init_lat'] = flash_data.group_lat.data
+    flash_np['ctr_lon'] = group_lon_noellps
+    flash_np['ctr_lat'] = group_lat_noellps
+    flash_np['init_lon'] = group_lon_noellps
+    flash_np['init_lat'] = group_lat_noellps
     t_start = sec_since_basedate(flash_data.group_time_offset.data, basedate)
     t_end = sec_since_basedate(flash_data.group_time_offset.data, basedate)
     flash_np['start'] = t_start
