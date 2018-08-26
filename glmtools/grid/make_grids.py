@@ -287,7 +287,7 @@ class GLMGridder(FlashGridder):
         if self.proj_name=='latlong':
             density_units = "grid"
         elif self.proj_name == 'geos':
-            density_units = '{0:7d} radians^2'.format(int(dx*dy))
+            density_units = 'nominal {0:7d} microradian^2'.format(int(dx*dy*1e12))
         else:
             density_units = "{0:5.1f} km^2".format(dx*spatial_scale_factor * dy*spatial_scale_factor).lstrip()
         time_units = "{0:5.1f} min".format(self.frame_interval/60.0).lstrip()
