@@ -185,7 +185,6 @@ def new_goes_imagery_dataset(x, y, nadir_lon):
     
     # Coordinate data: x, y
     xc, yc = get_goes_imager_fixedgrid_coords(x, y)
-    
     # Coordinate reference system
     goes_imager_proj = get_goes_imager_proj(nadir_lon)
     
@@ -193,15 +192,16 @@ def new_goes_imagery_dataset(x, y, nadir_lon):
     dqf = get_goes_imager_all_valid_dqf(dims, y.shape+x.shape)
     
     v = {goes_imager_proj.name:goes_imager_proj,
-         xc.name:xc,
-         yc.name:yc,
          dqf.name:dqf
         }
+    c = {xc.name:xc, yc.name:yc}
+    d = xr.Dataset(data_vars=v, coords=c)#, dims=dims)
+    # Attributes aren't carried over for xc and yc like they are for dqf, etc.
+    # so copy them over manually
+    d.x.attrs.update(xc.attrs)
+    d.y.attrs.update(yc.attrs)
     
-    d = xr.Dataset(data_vars=v)
-    d.set_coords(['y','x'], inplace=True)
     return d
-    
 
 def xy_to_2D_lonlat(gridder, x_coord, y_coord):
     self = gridder
@@ -251,18 +251,6 @@ def write_goes_imagery(gridder, outpath='.', pad=None):
     
     x_coord = ((xedge[:-1] + xedge[1:])/2.0)[x_slice]
     y_coord = ((yedge[:-1] + yedge[1:])/2.0)[y_slice]
-    # nx = x_coord.shape[0]
-    # ny = y_coord.shape[0]
-    
-    # Get the filename from the global metadata
-    # basename_parts = (output_filename_prefix,
-    #                   self.start_time.strftime('%Y%m%d_%H%M%S'),
-    #                   to_seconds(self.duration),
-    #                   self.min_points_per_flash,
-    #                   self.dx_units,
-    #                   )
-    # outfile_template = '%s_%s_%d_%dsrc_%s-dx.nc'
-    # outfile_basename = outfile_template % (basename_parts)
     
     file_iter = list(zip(self.outgrids, self.field_names,
                  self.field_descriptions, self.field_units, self.outformats))
@@ -285,8 +273,14 @@ def write_goes_imagery(gridder, outpath='.', pad=None):
                 "2km at nadir", "ABI Mode 3", "DE", "Postprocessed", "TTU"
                 )
         dataset = dataset.assign_attrs(**global_attrs)
+        # log.debug("*** Checking x coordinate attrs initial")
+        # log.debug(dataset.x.attrs)
                 
         outfile = os.path.join(outpath, dataset.attrs['dataset_name'])
+
+        # Adding a new variable to the dataset below clears the coord attrs
+        # so hold on to them for now.
+        xattrs, yattrs = dataset.x.attrs, dataset.y.attrs
         
         for i, (grid_allt, field_name, description, units, outformat) in enumerate(file_iter):
             grid = grid_allt[x_slice,y_slice,ti]
@@ -299,7 +293,19 @@ def write_goes_imagery(gridder, outpath='.', pad=None):
             img_var = glm_image_to_var(image_at_time,
                                        field_name, description, units,
                                        ('y', 'x'))
+            # Why does this line clear the attrs on the coords?
+            # log.debug("*** Checking x coordinate attrs {0}a".format(i))
+            # log.debug(dataset.x.attrs)
             dataset[img_var.name] = img_var
+            # log.debug("*** Checking x coordinate attrs {0}b".format(i))
+            # log.debug(dataset.x.attrs)
+
+        # Restore the cleared coord attrs
+        dataset.x.attrs.update(xattrs)
+        dataset.y.attrs.update(yattrs)
+
+        # log.debug("*** Checking x coordinate attrs final")
+        # log.debug(dataset.x.attrs)
             
         log.info("Preparing to write NetCDF {0}".format(outfile))
         dataset.to_netcdf(outfile)
