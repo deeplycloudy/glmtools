@@ -48,6 +48,7 @@ def get_goes_imager_all_valid_dqf(dims, n):
     enc['_FillValue'] = np.asarray(255, dtype='u1')
     enc['_Unsigned'] = "true"
     enc['dtype'] = 'i1'
+    enc['zlib'] = True # compress the field
     
     dqf_var = xr.DataArray(dqf, dims=dims, attrs=meta, encoding=enc, name="DQF")
     
@@ -162,6 +163,7 @@ def glm_image_to_var(data, name, long_name, units, dims, fill=0.0):
     meta = {}
     
     enc['_FillValue'] = fill
+    enc['zlib'] = True # Compress the data
     meta['standard_name'] = name
     meta['long_name'] = long_name
     meta['units'] = units

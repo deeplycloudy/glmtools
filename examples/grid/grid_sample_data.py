@@ -68,20 +68,28 @@ def grid_sample_data(grid_spec, output_sizes, dirname=None, save=None):
             
             # File size should be close to what we expect, with some platform
             # differences due to OS, compression, etc.
-            target = output_sizes[entry.name]
+            
+            test_file = entry.name
+            is_unified_type = ('OR_GLM-L2-GLMC-M3_G16_s20181830433000' in test_file)
+            if is_unified_type:
+                valid_file_key = 'OR_GLM-L2-GLMC-M3_G16_s20181830433000_e20181830434000_c20182551446.nc'
+            else:
+                valid_file_key = test_file
+            
+            target = output_sizes[valid_file_key]
             actual = entry.stat().st_size
             percent = 1
             assert  np.abs(target-actual) < int(target*percent/100)
 
             # Now compare the contents directly
             valid_file = os.path.join(sample_path, dirname, 
-                                      *resulting_date_path, entry.name)
+                                      *resulting_date_path, valid_file_key)
             valid = xr.open_dataset(valid_file)
             check = xr.open_dataset(entry.path)
             xr.testing.assert_allclose(valid, check)
             
             if (('total_energy' in output_sizes) & 
-                ('total_energy' in entry.name)):
+                ('total_energy' in test_file)):
                 np.testing.assert_allclose(check.total_energy.sum().data,
                                            output_sizes['total_energy'],
                                            rtol=1e-6)
@@ -128,10 +136,11 @@ def test_fixed_grid_conus():
         'GLM-00-00_20180702_043300_60_1src_056urad-dx_group_centroid.nc':63054,
         'GLM-00-00_20180702_043300_60_1src_056urad-dx_event.nc':128538,
         'GLM-00-00_20180702_043300_60_1src_056urad-dx_total_energy.nc':133139,
+        'OR_GLM-L2-GLMC-M3_G16_s20181830433000_e20181830434000_c20182551446.nc':577463,
     }
 
-    grid_sample_data(grid_spec, output_sizes, dirname='conus')
-        #, save='/data/tmp/glmtest/conus')
+    grid_sample_data(grid_spec, output_sizes, dirname='conus'
+        , save='/data/tmp/glmtest/conus')
 
 def test_fixed_grid_arbitrary():
     """ This is equivalent to running the following bash script, which produces
@@ -165,10 +174,11 @@ def test_fixed_grid_arbitrary():
         'GLM-00-00_20180702_043300_60_1src_056urad-dx_group_centroid.nc':19838,
         'GLM-00-00_20180702_043300_60_1src_056urad-dx_event.nc':25294,
         'GLM-00-00_20180702_043300_60_1src_056urad-dx_total_energy.nc':25820,
+        'OR_GLM-L2-GLMC-M3_G16_s20181830433000_e20181830434000_c20182551446.nc':95911,
     }
 
-    grid_sample_data(grid_spec, output_sizes, dirname='customsize')
-        #, save='/data/tmp/glmtest/customsize')
+    grid_sample_data(grid_spec, output_sizes, dirname='customsize'
+        , save='/data/tmp/glmtest/customsize')
     
 def test_fixed_grid_meso():
     """ This is equivalent to running the following bash script, which produces
@@ -202,8 +212,9 @@ def test_fixed_grid_meso():
         'GLM-00-00_20180702_043300_60_1src_056urad-dx_group_centroid.nc':21305,
         'GLM-00-00_20180702_043300_60_1src_056urad-dx_event.nc':26926,
         'GLM-00-00_20180702_043300_60_1src_056urad-dx_total_energy.nc':27501,
+        'OR_GLM-L2-GLMC-M3_G16_s20181830433000_e20181830434000_c20182551446.nc':101023,
         'total_energy':total_energy_in_L2(samples),
     }
 
-    grid_sample_data(grid_spec, output_sizes, dirname='meso')
-        #,save='/data/tmp/glmtest/meso')
+    grid_sample_data(grid_spec, output_sizes, dirname='meso'
+        ,save='/data/tmp/glmtest/meso')
