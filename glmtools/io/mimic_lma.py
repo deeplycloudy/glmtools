@@ -14,7 +14,6 @@ from glmtools.io.glm import GLMDataset, get_lutevents
 from glmtools.grid.split_events import split_event_data, split_event_dataset_from_props, split_group_dataset_from_props, split_flash_dataset_from_props, replicate_and_weight_split_child_dataset
 from glmtools.grid.clipping import QuadMeshPolySlicer, join_polys
 from glmtools.io.ccd import load_pixel_corner_lookup, quads_from_corner_lookup
-from glmtools.io.lightning_ellipse import ltg_ellps_lon_lat_to_fixed_grid
 from lmatools.io.LMA_h5_file import LMAh5Collection
 from lmatools.lasso.cell_lasso_timeseries import TimeSeriesGenericFlashSubset
 from lmatools.lasso.energy_stats import TimeSeriesPolygonLassoFilter
@@ -409,8 +408,7 @@ def read_flash_chunk(flash_data, glm=None, target=None, base_date=None, nadir_lo
             x_lut = x_lut * 1.0e-6
             y_lut = y_lut * 1.0e-6
             corner_lut = corner_lut*1e-6
-            event_x, event_y = ltg_ellps_lon_lat_to_fixed_grid(event_lons,
-                event_lats, nadir_lon, date)
+            event_x, event_y = flash_data.event_x.data, flash_data.event_y.data
             event_polys = quads_from_corner_lookup(x_lut, y_lut, corner_lut,
                 event_x, event_y)
             event_polys_inflated = quads_from_corner_lookup(x_lut, y_lut,
