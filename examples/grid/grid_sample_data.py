@@ -57,7 +57,8 @@ def grid_sample_data(grid_spec, output_sizes, dirname=None, save=None):
         from multiprocessing import freeze_support
         freeze_support()
         gridder, glm_filenames, start_time, end_time, grid_kwargs = grid_setup(args)
-        gridder(glm_filenames, start_time, end_time, **grid_kwargs)
+        output_return = gridder(glm_filenames, start_time, end_time, **grid_kwargs)
+        print(output_return)
         
         if save:
             from shutil import copytree
@@ -139,8 +140,8 @@ def test_fixed_grid_conus():
         'OR_GLM-L2-GLMC-M3_G16_s20181830433000_e20181830434000_c20182551446.nc':577463,
     }
 
-    grid_sample_data(grid_spec, output_sizes, dirname='conus'
-        , save='/data/tmp/glmtest/conus')
+    grid_sample_data(grid_spec, output_sizes, dirname='conus')
+        #, save='/data/tmp/glmtest/conus')
 
 def test_fixed_grid_arbitrary():
     """ This is equivalent to running the following bash script, which produces
@@ -177,8 +178,8 @@ def test_fixed_grid_arbitrary():
         'OR_GLM-L2-GLMC-M3_G16_s20181830433000_e20181830434000_c20182551446.nc':95911,
     }
 
-    grid_sample_data(grid_spec, output_sizes, dirname='customsize'
-        , save='/data/tmp/glmtest/customsize')
+    grid_sample_data(grid_spec, output_sizes, dirname='customsize')
+        #, save='/data/tmp/glmtest/customsize')
     
 def test_fixed_grid_meso():
     """ This is equivalent to running the following bash script, which produces
@@ -216,5 +217,5 @@ def test_fixed_grid_meso():
         'total_energy':total_energy_in_L2(samples),
     }
 
-    grid_sample_data(grid_spec, output_sizes, dirname='meso'
-        ,save='/data/tmp/glmtest/meso')
+    grid_sample_data(grid_spec, output_sizes, dirname='meso')
+#        ,save='/data/tmp/glmtest/meso')

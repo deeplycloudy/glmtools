@@ -258,6 +258,7 @@ def write_goes_imagery(gridder, outpath='.', pad=None):
                  self.field_descriptions, self.field_units, self.outformats))
     
     # Write a separate file at each time.
+    all_outfiles = []
     for ti, (t0, t1) in enumerate(pairwise(self.t_edges_seconds)):
         start = self.t_ref + timedelta(0, t0)
         end = self.t_ref + timedelta(0, t1)
@@ -312,3 +313,5 @@ def write_goes_imagery(gridder, outpath='.', pad=None):
         log.info("Preparing to write NetCDF {0}".format(outfile))
         dataset.to_netcdf(outfile)
         log.info("Wrote NetCDF {0}".format(outfile))
+        all_outfiles.append(outfile)
+    return all_outfiles

@@ -618,7 +618,8 @@ class GLMlutGridder(GLMGridder):
         pad = output_kwargs.pop('pad', None)
 
         from glmtools.io.imagery import write_goes_imagery
-        write_goes_imagery(self, outpath=outpath, pad=pad)
+        all_outfiles = write_goes_imagery(self, outpath=outpath, pad=pad)
+        return all_outfiles
 
 
 def subdivide_bnd(bnd, delta, s=8):
