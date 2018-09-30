@@ -2,7 +2,7 @@ from datetime import datetime
 import numpy as np
 
 from glmtools.io.lightning_ellipse import (ltg_ellps_lon_lat_to_fixed_grid, 
-    ltg_ellps_radii)
+    ltg_ellps_radii, ltg_ellpse_rev)
 
 # Values from the GOES-R L1b PUG Vol 3. These are values *without* the lightnign ellipsoid
 # test_lat = 33.846162
@@ -18,6 +18,7 @@ def test_ellipse_at_launch():
     # revision to the ellipsoid
     
     date = datetime(2018, 1, 1)
+    ellipse_rev = ltg_ellpse_rev(date)
     
     goes_lon = -75.0
     test_lon = -110., -110., -57., -57.
@@ -26,7 +27,7 @@ def test_ellipse_at_launch():
     fix_testy =  np.asarray((1.106891557528977,  -1.163584191758841,  1.199674272612177, -1.105394721298256))*1e5
 
     fix_x, fix_y = ltg_ellps_lon_lat_to_fixed_grid(test_lon, test_lat,
-        goes_lon, date)
+        goes_lon, ellipse_rev)
 
     # Differences are < 0.5 microradians
     assert np.allclose(fix_y*1e6, fix_testy)
@@ -36,6 +37,7 @@ def test_ellipse_revJ_ellipse():
 
     date = datetime(2030, 12, 31)
     # re, rp = ltg_ellps_radii(date)
+    ellipse_rev = ltg_ellpse_rev(date)
     
     # This example based on the ellipsoid *at launch*
     goes_lon = -75.0
@@ -45,7 +47,7 @@ def test_ellipse_revJ_ellipse():
     fix_testy = np.asarray([ 110667.78669847, -116338.15403498,  119946.98040115, -110517.06815844])
 
     fix_x, fix_y = ltg_ellps_lon_lat_to_fixed_grid(test_lon, test_lat,
-        goes_lon, date)
+        goes_lon, ellipse_rev)
 
     fix_x *= 1e6
     fix_y *= 1e6
