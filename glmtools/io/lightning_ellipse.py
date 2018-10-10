@@ -36,7 +36,7 @@ def ltg_ellpse_rev(date):
     ellps_rev (int): integer used to index the lightning_ellipse_rev dict.
     
     """
-    if date < datetime(2018,10,9):
+    if date < datetime(2018,10,15):
         return 0
     else:
         return 1
