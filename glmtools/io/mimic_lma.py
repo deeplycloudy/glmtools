@@ -14,7 +14,6 @@ from glmtools.io.glm import GLMDataset, get_lutevents
 from glmtools.grid.split_events import split_event_data, split_event_dataset_from_props, split_group_dataset_from_props, split_flash_dataset_from_props, replicate_and_weight_split_child_dataset
 from glmtools.grid.clipping import QuadMeshPolySlicer, join_polys
 from glmtools.io.ccd import load_pixel_corner_lookup, quads_from_corner_lookup
-from glmtools.io.lightning_ellipse import ltg_ellps_lon_lat_to_fixed_grid
 from lmatools.io.LMA_h5_file import LMAh5Collection
 from lmatools.lasso.cell_lasso_timeseries import TimeSeriesGenericFlashSubset
 from lmatools.lasso.energy_stats import TimeSeriesPolygonLassoFilter
@@ -154,6 +153,21 @@ def fast_fixed_grid_read_chunk(flash_data, target=None, base_date=None, nadir_lo
     """
     flash_data = get_lutevents(flash_data)
     geofixcs, grs80lla = get_GOESR_coordsys(sat_lon_nadir=nadir_lon)
+
+    # Calculate the longitude and latitude of the flash and group centroids on
+    # the zero-altitude ellipsoid, removing the lightning ellipse.
+    flash_lon_noellps, flash_lat_noellps, flash_alt_noellps = grs80lla.fromECEF(
+            *geofixcs.toECEF(flash_data.flash_x.data,
+                             flash_data.flash_y.data,
+                             np.zeros_like(flash_data.flash_x.data)))
+    group_lon_noellps, group_lat_noellps, group_alt_noellps = grs80lla.fromECEF(
+            *geofixcs.toECEF(flash_data.group_x.data,
+                             flash_data.group_y.data,
+                             np.zeros_like(flash_data.group_x.data)))
+    flash_data['flash_lon_noellps'] = flash_lon_noellps
+    flash_data['flash_lat_noellps'] = flash_lat_noellps
+    flash_data['group_lon_noellps'] = group_lon_noellps
+    flash_data['group_lat_noellps'] = group_lat_noellps
 
     split_event_dataset=None
     split_group_dataset=None
@@ -385,13 +399,16 @@ def read_flash_chunk(flash_data, glm=None, target=None, base_date=None, nadir_lo
         # unioning by a little bit to avoid the above problem.
 
         if fixed_grid:
+            pt = flash_data.product_time.dt
+            date = datetime(pt.year, pt.month, pt.day,
+                            pt.hour, pt.minute, pt.second)
+            
             x_lut, y_lut, corner_lut = load_pixel_corner_lookup(corner_pickle)
             # Convert from microradians to radians
             x_lut = x_lut * 1.0e-6
             y_lut = y_lut * 1.0e-6
             corner_lut = corner_lut*1e-6
-            event_x, event_y = ltg_ellps_lon_lat_to_fixed_grid(event_lons,
-                event_lats, nadir_lon)
+            event_x, event_y = flash_data.event_x.data, flash_data.event_y.data
             event_polys = quads_from_corner_lookup(x_lut, y_lut, corner_lut,
                 event_x, event_y)
             event_polys_inflated = quads_from_corner_lookup(x_lut, y_lut,
@@ -841,12 +858,15 @@ def _fake_lma_from_glm_lutflashes(flash_data, basedate):
         # no data, nothing to do
         return flash_np
 
+    flash_lon_noellps = flash_data.flash_lon_noellps.data
+    flash_lat_noellps = flash_data.flash_lat_noellps.data
+
     flash_np['area'] = flash_data.flash_area.data
     flash_np['total_energy'] = flash_data.flash_energy.data
-    flash_np['ctr_lon'] = flash_data.flash_lon.data
-    flash_np['ctr_lat'] = flash_data.flash_lat.data
-    flash_np['init_lon'] = flash_data.flash_lon.data
-    flash_np['init_lat'] = flash_data.flash_lat.data
+    flash_np['ctr_lon'] = flash_lon_noellps
+    flash_np['ctr_lat'] = flash_lat_noellps
+    flash_np['init_lon'] = flash_lon_noellps
+    flash_np['init_lat'] = flash_lat_noellps
     t_start = sec_since_basedate(flash_data.flash_time_offset_of_first_event.data, basedate)
     t_end = sec_since_basedate(flash_data.flash_time_offset_of_last_event.data, basedate)
     flash_np['start'] = t_start
@@ -870,12 +890,15 @@ def _fake_lma_from_glm_lutgroups(flash_data, basedate):
         # no data, nothing to do
         return flash_np
 
+    group_lon_noellps = flash_data.group_lon_noellps.data
+    group_lat_noellps = flash_data.group_lat_noellps.data
+
     flash_np['area'] = flash_data.group_area.data
     flash_np['total_energy'] = flash_data.group_energy.data
-    flash_np['ctr_lon'] = flash_data.group_lon.data
-    flash_np['ctr_lat'] = flash_data.group_lat.data
-    flash_np['init_lon'] = flash_data.group_lon.data
-    flash_np['init_lat'] = flash_data.group_lat.data
+    flash_np['ctr_lon'] = group_lon_noellps
+    flash_np['ctr_lat'] = group_lat_noellps
+    flash_np['init_lon'] = group_lon_noellps
+    flash_np['init_lat'] = group_lat_noellps
     t_start = sec_since_basedate(flash_data.group_time_offset.data, basedate)
     t_end = sec_since_basedate(flash_data.group_time_offset.data, basedate)
     flash_np['start'] = t_start

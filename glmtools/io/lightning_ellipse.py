@@ -1,7 +1,71 @@
+from datetime import datetime
 import numpy as np
 
-def ltg_ellps_lon_lat_to_fixed_grid(lon, lat, sat_lon,
-        re_ltg_ellps=6.394140e6, rp_ltg_ellps = 6.362755e6,
+# equatorial, polar radii
+lightning_ellipse_rev = {
+    # Values at launch
+    0: (6.394140e6, 6.362755e6),
+    
+    # DO.07, late 2018. First Virts revision.
+    # The GRS80 altitude + 6 km differs by about 3 m from the value above
+    # which is the exact that was provided at the time of launch. Use the
+    # original value instead of doing the math.
+    # 6.35675231414e6+6.0e3
+    1: (6.378137e6 + 14.0e3, 6.362755e6),
+}
+
+def ltg_ellpse_rev(date):
+    """
+    Given a date, return the lightning ellipsoid revision. The ellipsoid was
+    tuned after launch based on comparison of the GLM flash centroids to ground
+    strike locations.
+    
+    The date here refers to the operational GLM feed, and this is really
+    a convenience function for inferring the lightning ellipsoid revision. An
+    operational use of glmtools that expects data from a certain source should
+    treat the lightning ellipse revision as a configuration parameter that is
+    passed directly to the GLMDataset object (or the gridder class, which passes
+    the ellipse version along to GLMDataset). For future revisions of the
+    lightning ellipse, this allows for the processing code to be upgraded as
+    soon as the new ellipse parameter is known, and the new ellipse to be
+    chosen in a live environment as a less-surgery-requiring parameter change.
+    
+    date: datetime object for the date and time of observation
+    
+    Returns:
+    ellps_rev (int): integer used to index the lightning_ellipse_rev dict.
+    
+    """
+    if date < datetime(2018,10,15):
+        return 0
+    else:
+        return 1
+    
+def ltg_ellps_radii(date):
+    """
+    Given a date, return the equatorial and polar radii of the lightning
+    ellipsoid. The ellipsoid was tuned after launch based on comparison of the
+    GLM flash centroids to ground strike locations.
+    
+    The date here refers to the operational GLM feed, and this is really
+    a convenience function for inferring the lightning ellipsoid revision. An
+    operational use of glmtools that expects data from a certain source should
+    treat the lightning ellipse revision as a configuration parameter that is
+    passed directly to the GLMDataset object (or the gridder class, which passes
+    the ellipse version along to GLMDataset). For future revisions of the
+    lightning ellipse, this allows for the processing code to be upgraded as
+    soon as the new ellipse parameter is known, and the new ellipse to be
+    chosen in a live environment as a less-surgery-requiring parameter change.
+    
+    date: datetime object for the date and time of observation
+    
+    Returns: re_ltg_ellps, rp_ltg_ellps (meters): equatorial and polar radii
+        of the lightning ellipsoid, respectively.
+    """
+    re_ltg_ellps, rp_ltg_ellps = lightning_ellipse_rev[ltg_ellps_rev(date)]
+    return re_ltg_ellps, rp_ltg_ellps
+
+def ltg_ellps_lon_lat_to_fixed_grid(lon, lat, sat_lon, ellipse_rev,
         re_grs80 = 6.378137e6, rp_grs80 = 6.35675231414e6,
         sat_grs80_height=35.786023e6 ):
     """ 
@@ -33,6 +97,8 @@ def ltg_ellps_lon_lat_to_fixed_grid(lon, lat, sat_lon,
         Image navigation and registration for the geostationary lightning 
         mapper (GLM). Proc. SPIE 10004, 100041N, doi: 10.1117/12.2242141.
     """
+    re_ltg_ellps, rp_ltg_ellps = lightning_ellipse_rev[ellipse_rev]
+
     ff_ltg_ellps = (re_ltg_ellps - rp_ltg_ellps)/re_ltg_ellps
     ff_grs80 = (re_grs80 - rp_grs80)/re_grs80 # 0.003352810704800 
     sat_H = sat_grs80_height + re_grs80 # 42.164e6 
@@ -65,21 +131,3 @@ def ltg_ellps_lon_lat_to_fixed_grid(lon, lat, sat_lon,
     alpha = np.arctan(vz/vx) #* 1e6
     beta = -np.arcsin(vy) #* 1e6
     return beta, alpha
-
-# Values from the GOES-R L1b PUG Vol 3. These are values *without* the lightnign ellipsoid
-# test_lat = 33.846162
-# test_lon = -84.690932
-# test_alt = 0.0
-# test_fixx = -0.024052
-# test_fixy = 0.095340
-# test_fixz = 0.0
-if __name__ == '__main__':    
-    goes_lon = -75.0
-    test_lon = -110., -110., -57., -57.
-    test_lat = 42., -45., 46., -41.
-    fix_testx =  np.asarray((-7.072352765696357, -6.693857076039071,  3.593939139528318,  3.945876828443619))*1e4
-    fix_testy =  np.asarray((1.106891557528977,  -1.163584191758841,  1.199674272612177, -1.105394721298256))*1e5
-
-    fix_x, fix_y = ltg_ellps_lon_lat_to_fixed_grid(test_lon, test_lat, goes_lon)
-    print(fix_x*1e6 - fix_testx)
-    print(fix_y*1e6 - fix_testy)
