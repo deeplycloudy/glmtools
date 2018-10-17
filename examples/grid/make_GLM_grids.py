@@ -74,6 +74,11 @@ def create_parser():
     parser.add_argument('--split_events', dest='split_events', 
                         action='store_true',
                         help='Split GLM event polygons when gridding')
+    parser.add_argument('--ellipse', dest='ellipse_rev', default=-1,
+                        action='store', type=int,
+                        help='Lightning ellipse revision. -1 (default)=infer'
+                             ' from date in each GLM file, 0=value at launch,'
+                             ' 1=late 2018 revision')
     parser.add_argument('--lma', dest='is_lma', 
                         action='store_true', 
                         help='grid LMA h5 files instead of GLM data')
@@ -281,6 +286,7 @@ def grid_setup(args):
         grid_kwargs['energy_grids'] = ('total_energy',)
     if (proj_name=='pixel_grid') or (proj_name=='geos'):
         grid_kwargs['pixel_coords'] = fixed_grid
+    grid_kwargs['ellipse_rev'] = args.ellipse_rev
     # if args.corner_points:
         # grid_kwargs['corner_pickle'] = args.corner_points
     return gridder, glm_filenames, start_time, end_time, grid_kwargs

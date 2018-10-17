@@ -7,6 +7,11 @@ import pandas as pd
 
 from glmtools.io.traversal import OneToManyTraversal
 from glmtools.io.lightning_ellipse import ltg_ellps_lon_lat_to_fixed_grid
+from glmtools.io.lightning_ellipse import ltg_ellpse_rev
+
+import logging
+log = logging.getLogger(__name__)
+log.addHandler(logging.NullHandler())
 
 def parse_glm_filename_time(time_str):
         """ Given an input time string like
@@ -145,7 +150,7 @@ def event_areas(flash_data):
     # need logic here to replicate the event_area to all events.
 
 class GLMDataset(OneToManyTraversal):
-    def __init__(self, filename, calculate_parent_child=True):
+    def __init__(self, filename, calculate_parent_child=True, ellipse_rev=-1):
         """ filename is any data source which works with xarray.open_dataset
 
             By default, helpful additional parent-child data are calculated,
@@ -160,9 +165,16 @@ class GLMDataset(OneToManyTraversal):
             `product_time`) from the original files. In this state, the only
             safe route is to access `self.dataset` directly. Other methods of
             this class are not guaranteed to work.
+
+            ellipse_rev: Lightning ellipsoid associated with lat/lon values
+                    in filename.
+                -1 (default) : infer ellipsoid from GLM filename
+                0 : version at launch
+                1 : first revision, lowering equatorial height to 14 km.
         """
         dataset = xr.open_dataset(filename)
         self._filename = filename
+        self.ellipse_rev = ellipse_rev
 
         self.fov_dim = 'number_of_field_of_view_bounds'
         self.wave_dim = 'number_of_wavelength_bounds'
@@ -297,25 +309,30 @@ class GLMDataset(OneToManyTraversal):
             event_x, event_y, group_x, group_y, flash_x, flash_y
         """
         nadir_lon = self.dataset.lon_field_of_view.data
-        pt = self.dataset.product_time.dt
-        date = datetime(pt.year, pt.month, pt.day,
-                        pt.hour, pt.minute, pt.second)
-
+        ellipse_rev = self.ellipse_rev
+        if ellipse_rev < 0:
+            log.info("Inferring lightning ellipsoid from GLM product time")
+            pt = self.dataset.product_time.dt
+            date = datetime(pt.year, pt.month, pt.day,
+                            pt.hour, pt.minute, pt.second)
+            ellipse_rev = ltg_ellpse_rev(date)
+        log.info("Using lightning ellipsoid rev {0}".format(ellipse_rev))
+            
         event_x, event_y = ltg_ellps_lon_lat_to_fixed_grid(
             self.dataset.event_lon.data, self.dataset.event_lat.data,
-            nadir_lon, date)
+            nadir_lon, ellipse_rev)
         self.dataset['event_x'] = xr.DataArray(event_x, dims=[self.ev_dim,])
         self.dataset['event_y'] = xr.DataArray(event_y, dims=[self.ev_dim,])
 
         group_x, group_y = ltg_ellps_lon_lat_to_fixed_grid(
             self.dataset.group_lon.data, self.dataset.group_lat.data,
-            nadir_lon, date)
+            nadir_lon, ellipse_rev)
         self.dataset['group_x'] = xr.DataArray(group_x, dims=[self.gr_dim,])
         self.dataset['group_y'] = xr.DataArray(group_y, dims=[self.gr_dim,])
 
         flash_x, flash_y = ltg_ellps_lon_lat_to_fixed_grid(
             self.dataset.flash_lon.data, self.dataset.flash_lat.data,
-            nadir_lon, date)
+            nadir_lon, ellipse_rev)
         self.dataset['flash_x'] = xr.DataArray(flash_x, dims=[self.fl_dim,])
         self.dataset['flash_y'] = xr.DataArray(flash_y, dims=[self.fl_dim,])
 

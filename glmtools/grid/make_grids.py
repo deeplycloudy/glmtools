@@ -800,7 +800,8 @@ def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
 
     process_flash_kwargs = {}
     for prock in ('min_points_per_flash','min_groups_per_flash',
-                  'clip_events', 'fixed_grid', 'nadir_lon', 'corner_pickle'):
+                  'clip_events', 'fixed_grid', 'nadir_lon', 'corner_pickle',
+                  'ellipse_rev'):
         # interpret x_bnd and y_bnd as lon, lat
         if prock in kwargs:
             process_flash_kwargs[prock] = kwargs.pop(prock)
@@ -864,7 +865,8 @@ def proc_each_grid(subgrid, start_time=None, end_time=None, GLM_filenames=None):
     GLM_filenames -- a list of GLM filenames to process
     """
 
-    subgridij, kwargsij, process_flash_kwargs_ij, out_kwargs_ij, pads = subgrid
+    subgridij, kwargsij, process_flash_kwargs_ij, out_kwargs_ij, pads = subgrid 
+    ellipse_rev = process_flash_kwargs_ij.pop('ellipse_rev')
 
     # Eventually, we want to trim off n_x/y_pad from each side of the grid
     # n_x_pad, n_y_pad, x_pad, y_pad = pads
@@ -893,7 +895,7 @@ def proc_each_grid(subgrid, start_time=None, end_time=None, GLM_filenames=None):
         log.info(('process flash kwargs for {0} are'.format(subgridij),
             process_flash_kwargs_ij))
         sys.stdout.flush()
-        glm = GLMDataset(filename)
+        glm = GLMDataset(filename, ellipse_rev=ellipse_rev)
         # Pre-load the whole dataset, as recommended by the xarray docs.
         # This saves an absurd amount of time (factor of 80ish) in
         # grid.split_events.replicate_and_split_events
