@@ -92,7 +92,8 @@ def get_glm_global_attrs(start, end, platform, slot, instrument, scene_id,
     platform: one of G16, G17 or a follow-on platform
     slot: the orbital slot ("GOES-East", "GOES-West", etc.)
     instrument: one of "GLM-1", "GLM-2", or a follow on instrument.
-    scene_id: one of 'FULL', 'CONUS', 'MESO' if compatible with the ABI definitions or 'none'
+    scene_id: one of 'FULL', 'CONUS', 'MESO1', or 'MESO2' if compatible with
+        the ABI definitions or 'OTHER'.
     resolution: like "2km at nadir" 
     prod_env: "OE", "DE", etc.
     prod_src: "Realtime" or "Postprocessed"
@@ -105,10 +106,23 @@ def get_glm_global_attrs(start, end, platform, slot, instrument, scene_id,
     created = datetime.now()
     modes = {'ABI Mode 3':'M3'}
     
+    # For use in the dataset name / filename
+    scenes = {'FULL':'F',
+              'CONUS':'C',
+              'MESO1':'M1',
+              'MESO2':'M2',
+              'OTHER':'M1'}
+    scene_names = {"FULL":"Full Disk",
+                   "CONUS":"CONUS",
+                   "MESO1":"Mesoscale",
+                   "MESO2":"Mesoscale",
+                   "OTHER":"Custom"}
+
     # "OR_GLM-L2-GLMC-M3_G16_s20181011100000_e20181011101000_c20181011124580.nc 
-    dataset_name = "OR_GLM-L2-GLMC-{0}_{1}_s{2}_e{3}_c{4}.nc".format(
+    dataset_name = "OR_GLM-L2-GLM{5}-{0}_{1}_s{2}_e{3}_c{4}.nc".format(
         modes[timeline], platform, start.strftime('%Y%j%H%M%S0'),
-        end.strftime('%Y%j%H%M%S0'), created.strftime('%Y%j%H%M%S0')
+        end.strftime('%Y%j%H%M%S0'), created.strftime('%Y%j%H%M%S0'),
+        scenes[scene_id]
     )
     
     meta = {}
@@ -140,7 +154,7 @@ def get_glm_global_attrs(start, end, platform, slot, instrument, scene_id,
     meta['production_data_source'] = prod_src
     meta['production_environment'] = prod_env
     meta['production_site'] = prod_site 
-    meta['scene_id'] = scene_id
+    meta['scene_id'] = scene_names[scene_id]
     meta['spatial_resolution'] = resolution
     meta['time_coverage_end'] = end.isoformat()+'Z'
     meta['time_coverage_start'] = start.isoformat()+'Z'
@@ -228,6 +242,24 @@ def pairwise(iterable):
     next(b, None)
     return zip(a, b)
 
+def infer_scene_from_dataset(dataset):
+    "Infer whether the scene matches one of the GOES-R fixed grid domains."
+    from lmatools.grid.fixed import goesr_conus, goesr_meso, goesr_full
+    spanEW = dataset.x.data.max() - dataset.x.data.min()
+    spanNS = dataset.y.data.max() - dataset.y.data.min()
+    if (np.allclose(spanEW, goesr_full['spanEW']) & 
+          np.allclose(spanNS, goesr_full['spanNS']) ):
+        scene_id = "FULL"
+    elif (np.allclose(spanEW, goesr_conus['spanEW']) & 
+          np.allclose(spanNS, goesr_conus['spanNS']) ):
+        scene_id = "CONUS"
+    elif (np.allclose(spanEW, goesr_meso['spanEW']) & 
+          np.allclose(spanNS, goesr_meso['spanNS']) ):
+        scene_id = "MESO1"
+    else:
+        scene_id = "OTHER"
+    return scene_id
+
 def write_goes_imagery(gridder, outpath='.', pad=None):
     """ pad is a tuple of x_slice, y_slice: slice objects used to index the
             zeroth and first dimensions, respectively, of the grids in gridder.
@@ -270,9 +302,13 @@ def write_goes_imagery(gridder, outpath='.', pad=None):
         # transpose the grids and then flipud.
         dataset = new_goes_imagery_dataset(x_coord, np.flipud(y_coord),
                                            nadir_lon)
+
+        scene_id = infer_scene_from_dataset(dataset)
+        log.debug("Span of grid implies scene is {0}".format(scene_id))
+
         # Global metadata
         global_attrs = get_glm_global_attrs(start, end,
-                "G16", "GOES-East", "GLM-1", "Custom",
+                "G16", "GOES-East", "GLM-1", scene_id,
                 "2km at nadir", "ABI Mode 3", "DE", "Postprocessed", "TTU"
                 )
         dataset = dataset.assign_attrs(**global_attrs)
