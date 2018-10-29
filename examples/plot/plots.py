@@ -7,9 +7,6 @@ import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 from cartopy.io.shapereader import Reader as ShapeReader
 
-
-argentina_admin_1_shp = './shp/arg_adm1/ARG_adm1.shp'
-
 display_params = {}
 from matplotlib.cm import get_cmap
 from matplotlib.colors import LogNorm, Normalize
@@ -82,8 +79,6 @@ def plot_glm(fig, glm_grids, tidx, fields, subplots=(2,3),
     state_boundaries = cfeature.NaturalEarthFeature(category='cultural',
                                                     name='admin_1_states_provinces_lakes',
                                                     scale='50m', facecolor='none')
-    argentina_states = cfeature.ShapelyFeature(ShapeReader(argentina_admin_1_shp).geometries(),
-                                ccrs.PlateCarree(), facecolor='none')
     globe = ccrs.Globe(semimajor_axis=proj_var.semi_major_axis, semiminor_axis=proj_var.semi_minor_axis)
     proj = ccrs.Geostationary(central_longitude=proj_var.longitude_of_projection_origin,
                               satellite_height=proj_var.perspective_point_height, globe=globe)
@@ -97,11 +92,9 @@ def plot_glm(fig, glm_grids, tidx, fields, subplots=(2,3),
 
         ax = fig.add_subplot(subplots[0], subplots[1], fi+1, projection=proj)
         ax.background_patch.set_facecolor(axes_facecolor)
-#         ax.set_aspect('auto', adjustable=None)
 
         ax.coastlines('10m', color=map_color)
         ax.add_feature(state_boundaries, edgecolor=map_color, linewidth=0.5)
-        ax.add_feature(argentina_states, edgecolor=map_color, linewidth=0.5)
         ax.add_feature(country_boundaries, edgecolor=map_color, linewidth=1.0)
         
         glm = glm_grids[f].sel(time=tidx).data
@@ -138,13 +131,11 @@ def plot_glm(fig, glm_grids, tidx, fields, subplots=(2,3),
     fig.canvas.draw()
     for ax, glm_img in cbars:
         posn = ax.get_position()
-#         internal_left = [posn.x0 + posn.width*.87, posn.y0+posn.height*.05,
-#                          0.05, posn.height*.90]
         height_scale = .025*subplots[0]
         top_edge = [posn.x0, posn.y0+posn.height*(1.0-height_scale),
                     posn.width, posn.height*height_scale]
         cbar_ax = fig.add_axes(top_edge)
-        cbar = plt.colorbar(glm_img, orientation='horizontal', cax=cbar_ax, #aspect=50, 
+        cbar = plt.colorbar(glm_img, orientation='horizontal', cax=cbar_ax,
                     format=LogFormatter(base=2), ticks=LogLocator(base=2))
         cbar.outline.set_edgecolor(axes_facecolor)
         ax.outline_patch.set_edgecolor(axes_facecolor)

@@ -1,5 +1,5 @@
 import argparse
-parse_desc = """Plot a sequence of GLM data files."""
+parse_desc = """Plot a sequence of GLM data files. Requires cartopy."""
 
 def create_parser():
     parser = argparse.ArgumentParser(description=parse_desc)
@@ -14,7 +14,7 @@ import os
 import matplotlib.pyplot as plt
 
 from glmtools.io.imagery import open_glm_time_series
- 
+
 from plots import plot_glm
 
 fields_6panel = ['flash_extent_density', 'average_flash_area','total_energy', 
