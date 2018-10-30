@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 
 import numpy as np
 import xarray as xr
+import pandas as pd
 
 import logging
 log = logging.getLogger(__name__)
@@ -351,3 +352,20 @@ def write_goes_imagery(gridder, outpath='.', pad=None):
         log.info("Wrote NetCDF {0}".format(outfile))
         all_outfiles.append(outfile)
     return all_outfiles
+
+def open_glm_time_series(filenames):
+    """ Convenience function for combining individual 1-min GLM gridded imagery
+    files into a single xarray.Dataset with a time dimension.
+    
+    Creates an index on the time dimension.
+    
+    Does not adjust time_coverage_start and time_coverage_end metadata
+    to be accurate.
+    """
+    # Need to fix time_coverage_start and _end in concat dataset
+    all_xr = [xr.open_dataset(s) for s in filenames]
+    starts = [pd.to_datetime(d.time_coverage_start) for d in all_xr]
+    d = xr.concat(all_xr, dim='time')
+    d['time']=starts
+    d = d.set_index('time')
+    return d
