@@ -367,5 +367,5 @@ def open_glm_time_series(filenames):
     starts = [pd.to_datetime(d.time_coverage_start) for d in all_xr]
     d = xr.concat(all_xr, dim='time')
     d['time']=starts
-    d = d.set_index('time')
+    d = d.set_index({'time':'time'})
     return d
