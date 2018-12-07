@@ -130,7 +130,7 @@ Finally, if you want a fully custom grid size, you can omit the ``--goes_sector`
     python make_GLM_grids.py -o /path/to/output/
     --fixed_grid --split_events \
     --goes_position east \
-    --dx=2.0 --dy=2.0 "--width=1000.0", "--height=500.0" \
+    --dx=2.0 --dy=2.0 --width="1000.0" --height="500.0" \
     --ctr_lon=0.0 --ctr_lat=0.0 \
     OR_GLM-L2-LCFA_G16_s20181830433000_e20181830433200_c20181830433231.nc \
     OR_GLM-L2-LCFA_G16_s20181830433200_e20181830433400_c20181830433424.nc \
