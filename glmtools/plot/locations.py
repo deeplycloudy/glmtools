@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 
-def plot_flash(glm, flash_id):
+def plot_flash(glm, flash_id, ax=None, proj=None):
     flash_data = glm.get_flashes([flash_id])
 
     ev_parent = flash_data.event_parent_group_id  
@@ -24,22 +24,35 @@ def plot_flash(glm, flash_id):
     fl_time = (flash_data.flash_time_offset_of_first_event.data[0], 
                flash_data.flash_time_offset_of_last_event.data[0])
 
-    fig = plt.figure()
-    ax_ev = fig.add_subplot(111)
-    ax_ev.scatter(gr_lon, gr_lat, c=gr_rad, marker='o', s=100, 
-                  edgecolor='black', cmap='gray_r') 
+    if ax is None:
+        fig = plt.figure()
+        ax_ev = fig.add_subplot(111)
+    else:
+        ax_ev = ax
+    
+    gr_kwargs = dict(c=gr_rad, marker='o', s=100, 
+                     edgecolor='black', cmap='gray_r')
     #, vmin=glm.energy_min, vmax=glm.energy_max)
-    ax_ev.scatter(ev_lons, ev_lats, c=ev_rad, marker='s', s=16, 
-                  edgecolor='black', cmap='gray') 
+    if proj: gr_kwargs['transform'] = proj
+    ax_ev.scatter(gr_lon, gr_lat, **gr_kwargs) 
+
+    ev_kwargs = dict(c=ev_rad, marker='s', s=16, 
+                     edgecolor='black', cmap='gray') 
     #, vmin=glm.energy_min, vmax=glm.energy_max)
-    ax_ev.scatter(fl_lon, fl_lat, c='r', marker='x', s=100)
-    ax_ev.set_title('GLM Flash #{0}\nfrom {1}\nto {2}'.format(fl_id[0], fl_time[0], fl_time[1]))
+    if proj: ev_kwargs['transform'] = proj
+    ax_ev.scatter(ev_lons, ev_lats, **ev_kwargs)
+    
+    fl_kwargs = dict(c='r', marker='x', s=100)
+    if proj: fl_kwargs['transform'] = proj
+    ax_ev.scatter(fl_lon, fl_lat, **fl_kwargs)
+    ax_ev.set_title('GLM Flash #{0}\nfrom {1}\nto {2}'.format(
+        fl_id[0], fl_time[0], fl_time[1]))
 
     # prevent scientific notation
     ax_ev.get_xaxis().get_major_formatter().set_useOffset(False)
     ax_ev.get_yaxis().get_major_formatter().set_useOffset(False)
 
-    return fig
+    return ax_ev
 
 
 if __name__ == '__main__':
