@@ -9,6 +9,106 @@ import logging
 log = logging.getLogger(__name__)
 log.addHandler(logging.NullHandler())
 
+"""
+SCALING of fields
+
+---Flash extent density---
+For 330 ms time separation critera, the max flash rate per minute in any pixel
+is 181.8/min, or a max hourly value of 10860. 
+10860/65535 = 1/6
+Another way to go: for an 8x8 km GLM pixel oversampled to 2x2 km, 
+the fractional area coverage is 1/16. This works out to 4095 flashes per minute
+max, which seems plenty safe and covers the absolute max accumulation in 20 min.
+
+2 bytes unsigned
+scale=1/16=0.0625
+offset=0
+
+---Group extent density---
+Have a max in relampago case of 1000/min (max is 30000/min for a 500 fps CCD),
+so over 20 min this is 20000 events.
+That is 5x the max we assume above in FED, which is equivalent to 5 groups/flash
+assuming a full flash rate. And that full flash rate is unlikely to be reached!
+4*1/16 = 1/4 would preserve a bit of antialiasing and multiplies nicely.
+Set scale to 1/4 = 0.25
+Offset = 0
+
+
+---Flash and group centroid density---
+GCD will be larger than FCD, so size with GCD. The max rate for CGD will likely
+be the same as the GED - a maximum at the center of the cell. We can get away
+with two bytes, scale and offset of 1 because there is no antialiasing.
+scale=1
+offset=0
+
+---Average flash area, group area---
+WMO record distance flash distance is 320 km, which squared is ~100,000 km^2.
+Minimum observable flash area is 64 km^2, which divided by 16 (for smallest 
+fractional pixel coverage at 2 km) is 4 km^2.
+A 2 km^2 scale factor gets us 131070 max in two bytes.
+However, since 10000 km^2 is the max flash area in the L2 data, it will never
+be exceeded, and so we set scale to 1 and offset to 0, for a max 65535.
+
+2 bytes, unsigned
+scale_factor = 1 km^2
+offset = 0
+
+---Total optical energy---
+2 bytes, linear
+scale_factor=1.52597e-15 J, add_offset=0 (range 0 to 1.0e-10 J)
+
+1.0e-10 is also the max event_energy value in the L2 files, so we can’t have
+more than one event that hits that level. However, I think this should be safe.
+The fact that the flash_energy has the same scale factor as event_energy in L2
+suggests that there is margin in the ceiling of 1e-10 J. And as Scott's stats
+showed, pixels with total energy in excess of even 10e-12 J are quite rare.
+"""
+glm_scaling = {
+    'flash_extent_density':{'dtype':'uint16', 
+        'scale_factor':0.0625, 'add_offset':0.0},
+    'flash_centroid_density':{'dtype':'uint16', 
+        'scale_factor':1.0, 'add_offset':0.0},
+    'average_flash_area':{'dtype':'uint16', 
+        'scale_factor':1.0, 'add_offset':0.0},
+    'event_density':{'dtype':'uint16', 
+        'scale_factor':0.25, 'add_offset':0.0},
+    # 'standard_deviation_flash_area',
+    'group_extent_density':{'dtype':'uint16', 
+        'scale_factor':0.25, 'add_offset':0.0},
+    'group_centroid_density':{'dtype':'uint16', 
+        'scale_factor':1.0, 'add_offset':0.0},
+    'average_group_area':{'dtype':'uint16', 
+        'scale_factor':1.0, 'add_offset':0.0},
+    'total_energy':{'dtype':'uint16', 
+        'scale_factor':1.52597e-15, 'add_offset':0.0},
+}
+
+def get_goes_imager_subpoint_vars(nadir_lon):
+    """ Returns two xarray DataArrays containing the nominal satellite subpoint
+        latitude and longitude, as netCDF float variables.
+    
+        returns subpoint_lon, subpoint_lat
+    """
+    sublat_meta = {}
+    sublat_descr = "nominal satellite subpoint latitude (platform latitude)"
+    sublat_meta['long_name'] = sublat_descr
+    sublat_meta['standard_name'] = 'latitude'
+    sublat_meta['units'] = 'degrees_north'
+    sublat_enc = {'_FillValue':-999.0}
+    
+    sublon_meta = {}
+    sublon_descr = "nominal satellite subpoint longitude (platform longitude)"
+    sublon_meta['long_name'] = sublon_descr
+    sublon_meta['standard_name'] = 'longitude'
+    sublon_meta['units'] = 'degrees_east'
+    sublon_enc = {'_FillValue':-999.0}
+            
+    sublat = xr.DataArray(0.0, name='nominal_satellite_subpoint_lat',
+                          attrs=sublat_meta, encoding=sublat_enc)
+    sublon = xr.DataArray(nadir_lon, name='nominal_satellite_subpoint_lon',
+                          attrs=sublon_meta, encoding=sublon_enc)
+    return sublon, sublat
+
 def get_goes_imager_proj(nadir_lon):
     """ Returns an xarray DataArray containing the GOES-R series
         goes_imager_projection data and metadata
@@ -55,18 +155,45 @@ def get_goes_imager_all_valid_dqf(dims, n):
     
     return dqf_var
     
-def get_goes_imager_fixedgrid_coords(x, y):
+def get_goes_imager_fixedgrid_coords(x, y, resolution='2km at nadir'):
     """ Create variables with metadata for fixed grid coordinates as defined
     for the GOES-R series of spacecraft.
     
+    Assumes that imagery are at 2 km resolution (no other options are
+    implemented), and applies the scale and offset values indicated in the
+    GOES-R PUG for the full disk scene, guaranteeing that we cover all fixed
+    grid coordinates. The PUG has specific values for the CONUS sector, but
+    we ignore that case since the coordinates should be read and used from
+    the file as is by other software. Hopefully,
+    
     Arguments:
     x, y: 1-dimensional arrays of coordinate values
+    resolution: like "2km at nadir" 
     
     Returns: 
     x_var, y_var: xarray.DataArray objects, with type inferred from x and y.
     """
+    
+    # Values from the GOES-R PUG. These are signed shorts (int16).
+    scene_id = 'FULL'
+    two_km_enc = {
+        'FULL':{'dtype':'int16', 'x':{'scale_factor': 0.000056,
+                                      'add_offset':-0.151844},
+                                 'y':{'scale_factor':-0.000056,
+                                      'add_offset':0.151844},
+               }
+        # 'CONUS',
+        # 'MESO1', 'MESO2', 'OTHER'
+        }
+    # two_km_enc['OTHER'] = two_km_enc['MESO1']
+    
     x_meta, y_meta = {}, {}
+    x_enc = two_km_enc['FULL']['x']
+    x_enc['dtype'] = two_km_enc[scene_id]['dtype']
+    y_enc = two_km_enc['FULL']['y']
+    y_enc['dtype'] = two_km_enc[scene_id]['dtype']
 
+    
     x_meta['axis'] = "X"
     x_meta['long_name'] = "GOES fixed grid projection x-coordinate"
     x_meta['standard_name'] = 'projection_x_coordinate'
@@ -77,8 +204,10 @@ def get_goes_imager_fixedgrid_coords(x, y):
     y_meta['standard_name'] = 'projection_y_coordinate'    
     y_meta['units'] = "rad"
     
-    x_coord = xr.DataArray(x, attrs=x_meta, name='x', dims=('x',))
-    y_coord = xr.DataArray(y, attrs=y_meta, name='y', dims=('y',))
+    x_coord = xr.DataArray(x, name='x', dims=('x',),
+                           attrs=x_meta, encoding=x_enc)
+    y_coord = xr.DataArray(y, name='y', dims=('y',),
+                           attrs=y_meta, encoding=y_enc)
     return x_coord, y_coord
 
 
@@ -163,13 +292,21 @@ def get_glm_global_attrs(start, end, platform, slot, instrument, scene_id,
     
     return meta
     
-def glm_image_to_var(data, name, long_name, units, dims, fill=0.0):
+def glm_image_to_var(data, name, long_name, units, dims, fill=0.0,
+                     scale_factor=None, add_offset=None, dtype=None):
     """
     data: array of data
     name: the standard name, CF-compliant if possible
     long_name: a more descriptive name
     units: udunits string for the units of data
     dims: tuple of coordinate names
+
+    dtype: numpy dtype of variable to be written after applying scale and offset
+    
+    If dtype is not None, then the following are also checked
+    scale_factor, add_offset: floating point discretization and offset, as
+        commonly used in NetCDF datasets.
+        decoded = scale_factor * encoded + add_offset
     
     Returns: data_var, xarray.DataArray objects, with type inferred from data
 
@@ -179,6 +316,16 @@ def glm_image_to_var(data, name, long_name, units, dims, fill=0.0):
     
     enc['_FillValue'] = fill
     enc['zlib'] = True # Compress the data
+    if dtype is not None:
+        orig_dtype = dtype
+        if orig_dtype[0] == 'u':
+            enc['_Unsigned'] = 'true'
+            dtype= dtype[1:]
+        enc['dtype'] = dtype
+        if scale_factor is not None:
+            enc['scale_factor'] = scale_factor
+        if add_offset is not None:
+            enc['add_offset'] = add_offset
     meta['standard_name'] = name
     meta['long_name'] = long_name
     meta['units'] = units
@@ -204,12 +351,15 @@ def new_goes_imagery_dataset(x, y, nadir_lon):
     xc, yc = get_goes_imager_fixedgrid_coords(x, y)
     # Coordinate reference system
     goes_imager_proj = get_goes_imager_proj(nadir_lon)
+    subpoint_lon, subpoint_lat = get_goes_imager_subpoint_vars(nadir_lon)
     
     # Data quality flags
     dqf = get_goes_imager_all_valid_dqf(dims, y.shape+x.shape)
     
     v = {goes_imager_proj.name:goes_imager_proj,
-         dqf.name:dqf
+         dqf.name:dqf,
+         subpoint_lat.name:subpoint_lat,
+         subpoint_lon.name:subpoint_lon,
         }
     c = {xc.name:xc, yc.name:yc}
     d = xr.Dataset(data_vars=v, coords=c)#, dims=dims)
@@ -321,6 +471,7 @@ def write_goes_imagery(gridder, outpath='.', pad=None):
         # Adding a new variable to the dataset below clears the coord attrs
         # so hold on to them for now.
         xattrs, yattrs = dataset.x.attrs, dataset.y.attrs
+        xenc, yenc = dataset.x.encoding, dataset.y.encoding
         
         for i, (grid_allt, field_name, description, units, outformat) in enumerate(file_iter):
             grid = grid_allt[x_slice,y_slice,ti]
@@ -330,9 +481,13 @@ def write_goes_imagery(gridder, outpath='.', pad=None):
                 grid = grid/denom
                 grid[zeros] = 0 # avoid nans
             image_at_time = np.flipud(grid.T)
+
+            scale_kwargs = {}
+            if field_name in glm_scaling:
+                scale_kwargs.update(glm_scaling[field_name])
             img_var = glm_image_to_var(image_at_time,
                                        field_name, description, units,
-                                       ('y', 'x'))
+                                       ('y', 'x'), **scale_kwargs)
             # Why does this line clear the attrs on the coords?
             # log.debug("*** Checking x coordinate attrs {0}a".format(i))
             # log.debug(dataset.x.attrs)
@@ -343,6 +498,8 @@ def write_goes_imagery(gridder, outpath='.', pad=None):
         # Restore the cleared coord attrs
         dataset.x.attrs.update(xattrs)
         dataset.y.attrs.update(yattrs)
+        dataset.x.encoding.update(xenc)
+        dataset.y.encoding.update(yenc)
 
         # log.debug("*** Checking x coordinate attrs final")
         # log.debug(dataset.x.attrs)
