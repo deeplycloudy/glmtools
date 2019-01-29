@@ -1,5 +1,7 @@
 import matplotlib.pyplot as plt
 
+from glmtools.plot.values import display_params
+
 def plot_flash(glm, flash_id, ax=None, proj=None):
     flash_data = glm.get_flashes([flash_id])
 
@@ -30,19 +32,21 @@ def plot_flash(glm, flash_id, ax=None, proj=None):
     else:
         ax_ev = ax
     
+    energy_norm = display_params['total_energy']['glm_norm']
+    
     gr_kwargs = dict(c=gr_rad, marker='o', s=100, 
-                     edgecolor='black', cmap='gray_r')
-    #, vmin=glm.energy_min, vmax=glm.energy_max)
+                     edgecolor='black', cmap='gray',
+                     norm = energy_norm)
     if proj: gr_kwargs['transform'] = proj
     ax_ev.scatter(gr_lon, gr_lat, **gr_kwargs) 
 
     ev_kwargs = dict(c=ev_rad, marker='s', s=16, 
-                     edgecolor='black', cmap='gray') 
-    #, vmin=glm.energy_min, vmax=glm.energy_max)
+                     edgecolor='black', cmap='gray',
+                     norm=energy_norm)
     if proj: ev_kwargs['transform'] = proj
     ax_ev.scatter(ev_lons, ev_lats, **ev_kwargs)
     
-    fl_kwargs = dict(c='r', marker='x', s=100)
+    fl_kwargs = dict(c='r', marker='^', s=100)
     if proj: fl_kwargs['transform'] = proj
     ax_ev.scatter(fl_lon, fl_lat, **fl_kwargs)
     ax_ev.set_title('GLM Flash #{0}\nfrom {1}\nto {2}'.format(

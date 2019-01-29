@@ -8,57 +8,14 @@ import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 from cartopy.io.shapereader import Reader as ShapeReader
 
-display_params = {}
+from glmtools.plot.values import display_params
+
 from matplotlib.cm import get_cmap
-from matplotlib.colors import LogNorm, Normalize
 glm_cmap = get_cmap('viridis')
 # glm_cmap._init()
 # alphas = np.linspace(1.0, 1.0, glm_cmap.N+3)
 # glm_cmap._lut[:,-1] = alphas
 # glm_cmap._lut[0,-1] = 0.0
-
-display_params['flash_centroid_density'] = {
-    'product_label':"GOES-16 GLM Flash Centroid Density (count)",
-    'glm_norm':LogNorm(vmin=1, vmax=10),
-    'file_tag':'flash_centroid'
-}
-
-display_params['flash_extent_density'] = {
-    'product_label':"GOES-16 GLM Flash Extent Density (count)",
-    'glm_norm':LogNorm(vmin=1, vmax=50),
-    'file_tag':'flash_extent',
-}
-
-display_params['group_centroid_density'] = {
-    'product_label':"GOES-16 GLM Group Centroid Density (count)",
-    'glm_norm':LogNorm(vmin=1, vmax=10),
-    'file_tag':'group_centroid'
-}
-
-display_params['group_extent_density'] = {
-    'product_label':"GOES-16 GLM Group Extent Density (count)",
-    'glm_norm':LogNorm(vmin=1, vmax=500),
-    'file_tag':'group_extent',
-}
-display_params['event_density']=display_params['group_extent_density']
-
-display_params['total_energy'] = {
-    'product_label':"GOES-16 GLM Total Energy (J)",
-    'glm_norm':LogNorm(vmin=1e-17, vmax=1e-12),
-    'file_tag':'total_energy'
-}
-
-display_params[ 'average_flash_area'] = {
-    'product_label':"GOES-16 GLM Average Flash Area (km$^2$)",
-    'glm_norm':LogNorm(vmin=50, vmax=.5e4),
-    'file_tag':'flash_area'
-}
-
-display_params['average_group_area'] = {
-    'product_label':"GOES-16 GLM Average Group Area (km$^2$)",
-    'glm_norm':LogNorm(vmin=50, vmax=.5e4),
-    'file_tag':'group_area'
-}
 
 label_string = """
 {1} (max {0:3.0f})"""
@@ -70,7 +27,8 @@ def set_shared_geoaxes(fig):
     mapax[0].get_shared_x_axes().join(*mapax)
     mapax[0].get_shared_y_axes().join(*mapax)
 
-def plot_glm(fig, glm_grids, tidx, fields, subplots=(2,3),
+
+def plot_glm_grid(fig, glm_grids, tidx, fields, subplots=(2,3),
              axes_facecolor = (0., 0., 0.), map_color = (.8, .8, .8)):    
     fig.clf()
     glmx = glm_grids.x.data[:]
@@ -100,6 +58,7 @@ def plot_glm(fig, glm_grids, tidx, fields, subplots=(2,3),
 
         ax = fig.add_subplot(subplots[0], subplots[1], fi+1, projection=proj)
         ax.background_patch.set_facecolor(axes_facecolor)
+#         ax.set_aspect('auto', adjustable=None)
 
         ax.coastlines('10m', color=map_color)
         ax.add_feature(state_boundaries, edgecolor=map_color, linewidth=0.5)
@@ -141,11 +100,13 @@ def plot_glm(fig, glm_grids, tidx, fields, subplots=(2,3),
     fig.canvas.draw()
     for ax, glm_img in cbars:
         posn = ax.get_position()
+#         internal_left = [posn.x0 + posn.width*.87, posn.y0+posn.height*.05,
+#                          0.05, posn.height*.90]
         height_scale = .025*subplots[0]
         top_edge = [posn.x0, posn.y0+posn.height*(1.0-height_scale),
                     posn.width, posn.height*height_scale]
         cbar_ax = fig.add_axes(top_edge)
-        cbar = plt.colorbar(glm_img, orientation='horizontal', cax=cbar_ax,
+        cbar = plt.colorbar(glm_img, orientation='horizontal', cax=cbar_ax, #aspect=50, 
                     format=LogFormatter(base=2), ticks=LogLocator(base=2))
         cbar.outline.set_edgecolor(axes_facecolor)
         ax.outline_patch.set_edgecolor(axes_facecolor)
