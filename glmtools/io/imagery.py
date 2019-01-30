@@ -155,34 +155,42 @@ def get_goes_imager_all_valid_dqf(dims, n):
     
     return dqf_var
     
-def get_goes_imager_fixedgrid_coords(x, y, resolution='2km at nadir'):
+def get_goes_imager_fixedgrid_coords(x, y, resolution='2km at nadir',
+        scene_id='FULL'):
     """ Create variables with metadata for fixed grid coordinates as defined
     for the GOES-R series of spacecraft.
-    
+
     Assumes that imagery are at 2 km resolution (no other options are
     implemented), and applies the scale and offset values indicated in the
     GOES-R PUG for the full disk scene, guaranteeing that we cover all fixed
-    grid coordinates. The PUG has specific values for the CONUS sector, but
-    we ignore that case since the coordinates should be read and used from
-    the file as is by other software. Hopefully,
+    grid coordinates.
     
     Arguments:
     x, y: 1-dimensional arrays of coordinate values
-    resolution: like "2km at nadir" 
-    
+    resolution: like "2km at nadir"
+    scene_id: 'FULL' is the only allowed argument; other values will be ignored 
+
     Returns: 
     x_var, y_var: xarray.DataArray objects, with type inferred from x and y.
     """
-    
+    scene_id='FULL'
     # Values from the GOES-R PUG. These are signed shorts (int16).
-    scene_id = 'FULL'
     two_km_enc = {
         'FULL':{'dtype':'int16', 'x':{'scale_factor': 0.000056,
                                       'add_offset':-0.151844},
                                  'y':{'scale_factor':-0.000056,
                                       'add_offset':0.151844},
-               }
-        # 'CONUS',
+               },
+    # The PUG has specific values for the CONUS sector, and
+    # given the discretization of the coords to 2 km resolution, is it necessary
+    # to special-case each scene so the span of the image? Right now ONLY
+    # GOES-EAST CONUS IS IMPLEMENTED as a special case, with scene_id='CONUS'.
+
+        # 'CONUS':{'dtype':'int16', 'x':{'scale_factor': 0.000056,
+        #                               'add_offset':-0.101332},
+        #                          'y':{'scale_factor':-0.000056,
+        #                               'add_offset':0.128212},
+        #        }
         # 'MESO1', 'MESO2', 'OTHER'
         }
     # two_km_enc['OTHER'] = two_km_enc['MESO1']
@@ -347,8 +355,11 @@ def new_goes_imagery_dataset(x, y, nadir_lon):
     # Dimensions
     dims = ('y', 'x')
     
+    scene_id = infer_scene_from_dataset(x, y)
+    log.debug("Span of grid implies scene is {0}".format(scene_id))
+
     # Coordinate data: x, y
-    xc, yc = get_goes_imager_fixedgrid_coords(x, y)
+    xc, yc = get_goes_imager_fixedgrid_coords(x, y, scene_id=scene_id)
     # Coordinate reference system
     goes_imager_proj = get_goes_imager_proj(nadir_lon)
     subpoint_lon, subpoint_lat = get_goes_imager_subpoint_vars(nadir_lon)
@@ -368,7 +379,7 @@ def new_goes_imagery_dataset(x, y, nadir_lon):
     d.x.attrs.update(xc.attrs)
     d.y.attrs.update(yc.attrs)
     
-    return d
+    return d, scene_id
 
 def xy_to_2D_lonlat(gridder, x_coord, y_coord):
     self = gridder
@@ -393,19 +404,21 @@ def pairwise(iterable):
     next(b, None)
     return zip(a, b)
 
-def infer_scene_from_dataset(dataset):
+def infer_scene_from_dataset(x, y):
     "Infer whether the scene matches one of the GOES-R fixed grid domains."
     from lmatools.grid.fixed import goesr_conus, goesr_meso, goesr_full
-    spanEW = dataset.x.data.max() - dataset.x.data.min()
-    spanNS = dataset.y.data.max() - dataset.y.data.min()
-    if (np.allclose(spanEW, goesr_full['spanEW']) & 
-          np.allclose(spanNS, goesr_full['spanNS']) ):
+    spanEW = x.max() - x.min()
+    spanNS = y.max() - y.min()
+    log.debug("Inferring scene from spans x={0}, y={1}".format(spanEW, spanNS))
+    rtol = 1.0e-2
+    if   (np.allclose(spanEW, goesr_full['spanEW'], rtol=rtol) &
+          np.allclose(spanNS, goesr_full['spanNS'], rtol=rtol) ):
         scene_id = "FULL"
-    elif (np.allclose(spanEW, goesr_conus['spanEW']) & 
-          np.allclose(spanNS, goesr_conus['spanNS']) ):
+    elif (np.allclose(spanEW, goesr_conus['spanEW'], rtol=rtol) &
+          np.allclose(spanNS, goesr_conus['spanNS'], rtol=rtol) ):
         scene_id = "CONUS"
-    elif (np.allclose(spanEW, goesr_meso['spanEW']) & 
-          np.allclose(spanNS, goesr_meso['spanNS']) ):
+    elif (np.allclose(spanEW, goesr_meso['spanEW'], rtol=rtol) &
+          np.allclose(spanNS, goesr_meso['spanNS'], rtol=rtol) ):
         scene_id = "MESO1"
     else:
         scene_id = "OTHER"
@@ -451,11 +464,8 @@ def write_goes_imagery(gridder, outpath='.', pad=None):
         # upper left in the GOES-R series L1b PUG (section 5.1.2.6 Product Data
         # Structures). Later, to follow the image array convention will
         # transpose the grids and then flipud.
-        dataset = new_goes_imagery_dataset(x_coord, np.flipud(y_coord),
-                                           nadir_lon)
-
-        scene_id = infer_scene_from_dataset(dataset)
-        log.debug("Span of grid implies scene is {0}".format(scene_id))
+        dataset, scene_id = new_goes_imagery_dataset(x_coord,
+                                        np.flipud(y_coord), nadir_lon)
 
         # Global metadata
         global_attrs = get_glm_global_attrs(start, end,
