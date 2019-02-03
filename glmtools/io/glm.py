@@ -150,7 +150,8 @@ def event_areas(flash_data):
     # need logic here to replicate the event_area to all events.
 
 class GLMDataset(OneToManyTraversal):
-    def __init__(self, filename, calculate_parent_child=True, ellipse_rev=-1):
+    def __init__(self, filename, calculate_parent_child=True, ellipse_rev=-1,
+                 check_area_units=True):
         """ filename is any data source which works with xarray.open_dataset
 
             By default, helpful additional parent-child data are calculated,
@@ -171,6 +172,9 @@ class GLMDataset(OneToManyTraversal):
                 -1 (default) : infer ellipsoid from GLM filename
                 0 : version at launch
                 1 : first revision, lowering equatorial height to 14 km.
+     
+            check_area_units: If True (default) check the units on flash
+                and group area and convert to km^2 if in m^2.
         """
         dataset = xr.open_dataset(filename)
         self._filename = filename
@@ -206,6 +210,9 @@ class GLMDataset(OneToManyTraversal):
             # self.__init_event_lut()
         else:
             self.dataset = dataset
+            
+        if check_area_units:
+            did_fix = self._check_area_units()
 
     def __init_parent_child_data(self):
         """ Calculate implied parameters that are useful for analyses
@@ -239,6 +246,22 @@ class GLMDataset(OneToManyTraversal):
         flash_child_event_count = xr.DataArray(count,
                                                dims=[self.fl_dim,])
         self.dataset['flash_child_event_count'] = flash_child_event_count
+
+    def _check_area_units(self):
+        fixed_flash_area, fixed_group_area = False, False
+        if self.dataset.flash_area.units == 'm2':
+            self.dataset['flash_area'] = self.dataset['flash_area']/1.0e6
+            self.dataset.flash_area.attrs['units'] = 'km2'
+            fixed_flash_area = True
+            log.debug('New flash area units: {0}'.format(
+                        self.dataset.flash_area.units))
+        if self.dataset.group_area.units == 'm2':
+            self.dataset['group_area'] = self.dataset['group_area']/1.0e6
+            self.dataset.group_area.attrs['units'] = 'km2'
+            fixed_group_area = True
+            log.debug('New group area units: {0}'.format(
+                        self.dataset.group_area.units))
+        return fixed_flash_area, fixed_group_area
 
 
     @property
