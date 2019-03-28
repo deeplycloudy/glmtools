@@ -26,6 +26,7 @@ def set_shared_geoaxes(fig):
     # for axi in fig.mapax[1:]:
     mapax[0].get_shared_x_axes().join(*mapax)
     mapax[0].get_shared_y_axes().join(*mapax)
+    return mapax
 
 
 def plot_glm_grid(fig, glm_grids, tidx, fields, subplots=(2,3),
@@ -98,6 +99,7 @@ def plot_glm_grid(fig, glm_grids, tidx, fields, subplots=(2,3),
     # Have to draw to force layout so that the ax position is correct
     fig.tight_layout()
     fig.canvas.draw()
+    cbar_obj = []
     for ax, glm_img in cbars:
         posn = ax.get_position()
 #         internal_left = [posn.x0 + posn.width*.87, posn.y0+posn.height*.05,
@@ -112,5 +114,8 @@ def plot_glm_grid(fig, glm_grids, tidx, fields, subplots=(2,3),
         ax.outline_patch.set_edgecolor(axes_facecolor)
         cbar.ax.tick_params(direction='in', color=axes_facecolor, which='both',
                             pad=-14, labelsize=10, labelcolor=axes_facecolor)
-    set_shared_geoaxes(fig)
+        cbar_obj.append(cbar)
+    mapax = set_shared_geoaxes(fig)
+    return mapax, cbar_obj
+    
 

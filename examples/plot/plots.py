@@ -69,6 +69,7 @@ def set_shared_geoaxes(fig):
     # for axi in fig.mapax[1:]:
     mapax[0].get_shared_x_axes().join(*mapax)
     mapax[0].get_shared_y_axes().join(*mapax)
+    return mapax
 
 def plot_glm(fig, glm_grids, tidx, fields, subplots=(2,3),
              axes_facecolor = (0., 0., 0.), map_color = (.8, .8, .8)):    
@@ -151,5 +152,6 @@ def plot_glm(fig, glm_grids, tidx, fields, subplots=(2,3),
         ax.outline_patch.set_edgecolor(axes_facecolor)
         cbar.ax.tick_params(direction='in', color=axes_facecolor, which='both',
                             pad=-14, labelsize=10, labelcolor=axes_facecolor)
-    set_shared_geoaxes(fig)
+    mapax = set_shared_geoaxes(fig)
+    return mapax, [ax for (ax,img) in cbars]
 

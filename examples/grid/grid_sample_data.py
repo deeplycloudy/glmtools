@@ -77,10 +77,10 @@ def grid_sample_data(grid_spec, output_sizes, dirname=None, save=None):
             else:
                 valid_file_key = test_file
             
-            target = output_sizes[valid_file_key]
-            actual = entry.stat().st_size
-            percent = 1
-            assert  np.abs(target-actual) < int(target*percent/100)
+            # target = output_sizes[valid_file_key]
+            # actual = entry.stat().st_size
+            # percent = 1
+            # assert  np.abs(target-actual) < int(target*percent/100)
 
             # Now compare the contents directly
             valid_file = os.path.join(sample_path, dirname, 
@@ -127,6 +127,7 @@ def test_fixed_grid_conus():
                 "--goes_position", "east", "--goes_sector", "conus", 
                 "--dx=2.0", "--dy=2.0",
                 # "--ctr_lon=0.0", "--ctr_lat=0.0",
+                "--ellipse=0",
                 ]
     output_sizes = {
         'GLM-00-00_20180702_043300_60_1src_056urad-dx_flash_extent.nc':123145,
@@ -140,8 +141,8 @@ def test_fixed_grid_conus():
         'OR_GLM-L2-GLMC-M3_G16_s20181830433000_e20181830434000_c20182551446.nc':577463,
     }
 
-    grid_sample_data(grid_spec, output_sizes, dirname='conus')
-        #, save='/data/tmp/glmtest/conus')
+    grid_sample_data(grid_spec, output_sizes, dirname='conus'
+        , save='/data/tmp/glmtest/conus')
 
 def test_fixed_grid_arbitrary():
     """ This is equivalent to running the following bash script, which produces
@@ -164,7 +165,8 @@ def test_fixed_grid_arbitrary():
                 "--goes_position", "east",
                 "--dx=2.0", "--dy=2.0",
                 "--ctr_lat=33.5", "--ctr_lon=-101.5",
-                "--width=1000.0", "--height=500.0"
+                "--width=1000.0", "--height=500.0",
+                "--ellipse=0",
                 ]
     output_sizes = {
         'GLM-00-00_20180702_043300_60_1src_056urad-dx_flash_extent.nc':24775,
@@ -178,8 +180,8 @@ def test_fixed_grid_arbitrary():
         'OR_GLM-L2-GLMC-M3_G16_s20181830433000_e20181830434000_c20182551446.nc':95911,
     }
 
-    grid_sample_data(grid_spec, output_sizes, dirname='customsize')
-        #, save='/data/tmp/glmtest/customsize')
+    grid_sample_data(grid_spec, output_sizes, dirname='customsize'
+        , save='/data/tmp/glmtest/customsize')
     
 def test_fixed_grid_meso():
     """ This is equivalent to running the following bash script, which produces
@@ -203,6 +205,7 @@ def test_fixed_grid_meso():
                 "--goes_position", "east", "--goes_sector", "meso",
                 "--dx=2.0", "--dy=2.0",
                 "--ctr_lat=33.5", "--ctr_lon=-101.5",
+                "--ellipse=0",
                 ]
     output_sizes = {
         'GLM-00-00_20180702_043300_60_1src_056urad-dx_flash_extent.nc':26370,
@@ -217,5 +220,5 @@ def test_fixed_grid_meso():
         'total_energy':total_energy_in_L2(samples),
     }
 
-    grid_sample_data(grid_spec, output_sizes, dirname='meso')
-#        ,save='/data/tmp/glmtest/meso')
+    grid_sample_data(grid_spec, output_sizes, dirname='meso'
+       ,save='/data/tmp/glmtest/meso')
