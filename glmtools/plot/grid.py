@@ -18,7 +18,8 @@ glm_cmap = get_cmap('viridis')
 # glm_cmap._lut[0,-1] = 0.0
 
 label_string = """
-{1} (max {0:3.0f})"""
+{1} (max {0})"""
+panel_labels=['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l']
 
 def set_shared_geoaxes(fig):
     mapax =[axi for axi in fig.axes if
@@ -56,6 +57,7 @@ def plot_glm_grid(fig, glm_grids, tidx, fields, subplots=(2,3),
         glm_norm = display_params[f]['glm_norm']
         product_label = display_params[f]['product_label']
         file_tag = display_params[f]['file_tag']
+        max_format = display_params[f]['format_string']
 
         ax = fig.add_subplot(subplots[0], subplots[1], fi+1, projection=proj)
         ax.background_patch.set_facecolor(axes_facecolor)
@@ -85,13 +87,17 @@ def plot_glm_grid(fig, glm_grids, tidx, fields, subplots=(2,3),
     
         # limits = ax.axis()
         limits = [0.,1.,0.,1.]
+        glm_field_max = max_format.format(glm.max())
         ax.text(limits[0]+.02*(limits[1]-limits[0]), limits[2]+.02*(limits[3]-limits[2]), 
             tidx.isoformat().replace('T', ' ')+' UTC'+
-            label_string.format(glm.max(), product_label), 
-    #             transform = proj,
+            label_string.format(glm_field_max, product_label), 
             transform = ax.transAxes,
             color=map_color)
-
+        ax.text(limits[0]+.02*(limits[1]-limits[0]),
+                limits[3]-.08*(limits[3]-limits[2]),
+                panel_labels[fi],
+                transform = ax.transAxes,
+                color=map_color)
 
         cbars.append((ax,glm_img))
 
