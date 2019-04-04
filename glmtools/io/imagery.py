@@ -424,9 +424,13 @@ def infer_scene_from_dataset(x, y):
         scene_id = "OTHER"
     return scene_id
 
-def write_goes_imagery(gridder, outpath='.', pad=None):
+def write_goes_imagery(gridder, outpath='.', pad=None, scale_and_offset=True):
     """ pad is a tuple of x_slice, y_slice: slice objects used to index the
             zeroth and first dimensions, respectively, of the grids in gridder.
+    
+        scale_and_offset controls whether to write variables as scaled ints.
+        if False, floating point grids will be written.
+        
     """
                 # output_filename_prefix="LMA", **output_kwargs):
     self = gridder
@@ -493,7 +497,7 @@ def write_goes_imagery(gridder, outpath='.', pad=None):
             image_at_time = np.flipud(grid.T)
 
             scale_kwargs = {}
-            if field_name in glm_scaling:
+            if (field_name in glm_scaling) and scale_and_offset:
                 scale_kwargs.update(glm_scaling[field_name])
             img_var = glm_image_to_var(image_at_time,
                                        field_name, description, units,

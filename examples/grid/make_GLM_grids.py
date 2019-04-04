@@ -79,6 +79,10 @@ def create_parser():
                         help='Lightning ellipse revision. -1 (default)=infer'
                              ' from date in each GLM file, 0=value at launch,'
                              ' 1=late 2018 revision')
+    parser.add_argument('--float_output', dest='output_scale_and_offset',
+                        default=True,
+                        action='store_false', 
+                        help='write all output variables as floating point')
     parser.add_argument('--lma', dest='is_lma', 
                         action='store_true', 
                         help='grid LMA h5 files instead of GLM data')
@@ -271,6 +275,7 @@ def grid_setup(args):
             min_points_per_flash = min_events,
             output_writer = output_writer, subdivide=args.subdivide_grid,
             output_filename_prefix=output_filename_prefix,
+            output_kwargs={'scale_and_offset':args.output_scale_and_offset},
             spatial_scale_factor=1.0)
 
     if args.fixed_grid:

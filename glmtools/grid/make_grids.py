@@ -616,9 +616,11 @@ class GLMlutGridder(GLMGridder):
                     output_filename_prefix = None, output_kwargs={}):
 
         pad = output_kwargs.pop('pad', None)
+        scale_and_offset = output_kwargs.pop('scale_and_offset', True)
 
         from glmtools.io.imagery import write_goes_imagery
-        all_outfiles = write_goes_imagery(self, outpath=outpath, pad=pad)
+        all_outfiles = write_goes_imagery(self, outpath=outpath, pad=pad,
+            scale_and_offset=scale_and_offset)
         return all_outfiles
 
 
