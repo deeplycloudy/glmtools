@@ -3,3 +3,4 @@ include glmtools/test/data/FGE_split_merge_GLM.nc
 include glmtools/test/data/OR_GLM-L2-LCFA_G16_s20181830433000_e20181830433200_c20181830433231.nc
 include glmtools/test/data/OR_GLM-L2-LCFA_G16_s20181830433200_e20181830433400_c20181830433424.nc
 include glmtools/test/data/OR_GLM-L2-LCFA_G16_s20181830433400_e20181830434000_c20181830434029.nc
+include examples/grid/make_GLM_grids.py
