@@ -234,6 +234,7 @@ class GLMGridder(FlashGridder):
         (init_density_grid, extent_density_grid, footprint_grid,
             # flashsize_std_grid
             ) = flash_outgrids
+        min_flash_area_grid = np.zeros_like(footprint_grid)# move into pipeline_setup next
 
         group_outgrids, group_framer = self.group_pipeline_setup()
         (group_centroid_density_grid, group_extent_density_grid,
@@ -255,6 +256,7 @@ class GLMGridder(FlashGridder):
             group_centroid_density_grid,
             group_footprint_grid,
             # groupsize_std_grid
+            min_flash_area_grid,
             )
         self.outgrids_3d = None
 
@@ -301,7 +303,8 @@ class GLMGridder(FlashGridder):
                                   'total_energy.nc',
                                   'group_extent.nc',
                                   'group_init.nc',
-                                  'group_area.nc',)
+                                  'group_area.nc',
+                                  'flash_area_min.nc')
         self.outfile_postfixes_3d = None
 
         self.field_names = ('flash_extent_density',
@@ -313,6 +316,7 @@ class GLMGridder(FlashGridder):
                        'group_extent_density',
                        'group_centroid_density',
                        'average_group_area',
+                       'minimum_flash_area',
                        )
 
         self.field_descriptions = ('Flash extent density',
@@ -324,6 +328,7 @@ class GLMGridder(FlashGridder):
                             'Group extent density',
                             'Group centroid density',
                             'Average group area',
+                            'Minimum flash area',
                             )
 
         # In some use cases, it's easier to calculate totals (for area or
@@ -347,11 +352,12 @@ class GLMGridder(FlashGridder):
             density_label,
             density_label,
             "km^2 per group",
+            "km^2",
             )
         self.field_units_3d = None
 
-        self.outformats = ('f',) * 8
-        self.outformats_3d = ('f',) * 8
+        self.outformats = ('f',) * len(self.field_units)
+        self.outformats_3d = ('f',) * len(self.field_units)
 
 
     def process_flashes(self, glm, lat_bnd=None, lon_bnd=None,
