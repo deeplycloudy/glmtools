@@ -266,13 +266,15 @@ def replicate_and_weight_split_child_dataset_new(parent_data, split_child_datase
         parent_id='lutevent_id', split_child_parent_id='split_event_parent_event_id',
         names=['lutevent_id', 'lutevent_energy', 'lutevent_time_offset',
                'lutevent_count', 'lutevent_flash_count', 'lutevent_group_count',
-               'lutevent_total_flash_area', 'lutevent_total_group_area'],
+               'lutevent_total_flash_area', 'lutevent_total_group_area',
+               'lutevent_min_flash_area'],
         weights={'lutevent_energy':'split_event_area_fraction',
                  'lutevent_count': 'split_event_mesh_area_fraction',
                  'lutevent_flash_count': 'split_event_mesh_area_fraction',
                  'lutevent_group_count': 'split_event_mesh_area_fraction',
                  'lutevent_total_flash_area':'split_event_mesh_area_fraction',
                  'lutevent_total_group_area':'split_event_mesh_area_fraction',
+                 'lutevent_min_flash_area':'split_event_mesh_area_fraction',
                 }
         ):
     """
@@ -832,6 +834,7 @@ def _fake_lma_events_from_split_glm_lutevents(split_events, basedate):
                  ('lutevent_group_count', 'f4'),
                  ('lutevent_total_flash_area', 'f4'),
                  ('lutevent_total_group_area', 'f4'),
+                 ('lutevent_min_flash_area', 'f4'),
                  ]
 
     event_np = np.empty_like(split_events.split_event_lon.data,
@@ -856,6 +859,7 @@ def _fake_lma_events_from_split_glm_lutevents(split_events, basedate):
     event_np['lutevent_group_count'] = split_events.split_lutevent_group_count.data
     event_np['lutevent_total_flash_area'] = split_events.split_lutevent_total_flash_area.data
     event_np['lutevent_total_group_area'] = split_events.split_lutevent_total_group_area.data
+    event_np['lutevent_min_flash_area'] = split_events.split_lutevent_min_flash_area.data
 
     return event_np
 

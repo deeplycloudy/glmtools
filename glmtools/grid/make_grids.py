@@ -505,10 +505,8 @@ class GLMlutGridder(GLMGridder):
                 weight_key='lutevent_flash_count', weight_flashes=False)
             mean_footprint_target = point_density(accum_footprint,
                 weight_key='lutevent_total_flash_area', weight_flashes=False)
-            # FIXME: lutevent_total_flash_area will change once 
-            #        the dataset has the calculation
             min_area_target = point_density(accum_min_area,
-                weight_key='lutevent_total_flash_area', weight_flashes=False)
+                weight_key='lutevent_min_flash_area', weight_flashes=False)
 
             broadcast_targets = (
                 project('init_lon', 'init_lat', 'init_alt', mapProj, geoProj,
@@ -626,11 +624,6 @@ class GLMlutGridder(GLMGridder):
 
         self.divide_grids[3]=0
         self.divide_grids[7]=5
-        
-        # Will remove this in the next step, but for now it flags where
-        # per-flash post-processing takes place.
-        self.divide_grids[8]=0
-
 
 
 def subdivide_bnd(bnd, delta, s=8):
