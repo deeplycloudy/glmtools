@@ -40,8 +40,21 @@ I'll break this down into three steps:
 
 A test environment
 ------------------
-As part of development we need to run the same data over and over again. We will use the examples in glm_test_data_new_grid_dev.ipynb to run those examples.
+As part of development I need to run the same data over and over again. I will use the notebook `glm_test_data_new_grid_dev.ipynb` to do so.
 
 
 Adding a new field
 ------------------
+Commit:
+
+
+Adding a new pipeline
+---------------------
+Commit:
+Additional post-processing step needed to replicate average area after accumulation. Have to divide by FED. We won't need this for minimum flash area,
+but it's good to see where that calculation takes place for average flash area.
+Background: dabeaz coroutines
+
+Adding a new calculation to feed the pipeline.
+
+Don't forget to remove the post-processing step needed above.
