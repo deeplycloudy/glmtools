@@ -182,11 +182,20 @@ def fast_fixed_grid_read_chunk(flash_data, target=None, base_date=None, nadir_lo
     x_lut = x_lut * 1.0e-6
     y_lut = y_lut * 1.0e-6
     corner_lut = corner_lut*1e-6
+    log.debug("event x y ranges")
+    log.debug(str((event_x.data.min(),event_x.data.max())))
+    log.debug(str((event_y.data.min(),event_y.data.max())))
+    log.debug("lut x y ranges")
+    log.debug(str((x_lut.min(),x_lut.max())))
+    log.debug(str((y_lut.min(),y_lut.max())))
     event_polys = quads_from_corner_lookup(x_lut, y_lut, corner_lut,
         event_x, event_y)
     # event_polys_inflated = event_polys
     # event_polys_inflated = quads_from_corner_lookup(x_lut, y_lut,
     #     corner_lut, event_x, event_y, inflate=1.02)
+    log.debug("event polys ranges")
+    log.debug(str((event_polys[:,:,0].min(),event_polys[:,:,0].max())))
+    log.debug(str((event_polys[:,:,1].min(),event_polys[:,:,1].max())))
 
     slicer = QuadMeshPolySlicer(mesh)
     # --- Split up the events ---
