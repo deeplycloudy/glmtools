@@ -17,7 +17,7 @@ from lmatools.grid.make_grids import FlashGridder
 from lmatools.grid.fixed import get_GOESR_coordsys
 from lmatools.grid.density_to_files import (accumulate_points_on_grid,
     accumulate_points_on_grid_sdev, accumulate_energy_on_grid,
-    point_density, extent_density, project,
+    point_density, extent_density, project, accumulate_minimum_on_grid,
     flashes_to_frames, flash_count_log, extract_events_for_flashes)
 from lmatools.stream.subset import broadcast
 import sys
@@ -496,7 +496,7 @@ class GLMlutGridder(GLMGridder):
             accum_footprint      = accumulate_energy_on_grid(
                 footprint_grid[:,:,i], xedge, yedge,
                 label='flash area', grid_frac_weights=False)
-            accum_min_area       = accumulate_energy_on_grid(
+            accum_min_area       = accumulate_minimum_on_grid(
                 min_area_grid[:,:,i], xedge, yedge,
                 label='min flash area', grid_frac_weights=False)
 
