@@ -883,8 +883,13 @@ def proc_each_grid(subgrid, start_time=None, end_time=None, GLM_filenames=None):
         # Pre-load the whole dataset, as recommended by the xarray docs.
         # This saves an absurd amount of time (factor of 80ish) in
         # grid.split_events.replicate_and_split_events
-        glm.dataset.load()
-        gridder.process_flashes(glm, **process_flash_kwargs_ij)
+        if len(glm.dataset.number_of_events) > 0:
+            # xarray 0.12.1 (and others?) throws an error when trying to load
+            # data from an empty dimension.
+            glm.dataset.load()
+            gridder.process_flashes(glm, **process_flash_kwargs_ij)
+        else:
+            log.info("Skipping {0} - number of events is 0".format(filename))
         glm.dataset.close()
         del glm
 
