@@ -65,7 +65,7 @@ def grid_sample_data(grid_spec, output_sizes, dirname=None):
             
             # for valid_var, valid_data in valid.variables.items():
             #     check_data = check.variables[valid_var]
-            #     assert numpy.all_close(valid_data.data[:], check_data.data[:])
+            #     assert np.testing.all_close(valid_data.data[:], check_data.data[:])
 
             # print(entry.name, entry.stat().st_size)
 
