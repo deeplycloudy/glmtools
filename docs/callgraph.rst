@@ -61,7 +61,7 @@ We initially didn't do any caching, because the assumption was the platform migh
 Generation of a call graph graphic
 ==================================
 
-Below is a sample run that generates a GraphViz call graph, including per-function timing. Requires pycallgraph (installable with pip).
+Below is a sample run that generates a GraphViz call graph, including per-function timing. Requires pycallgraph (installable with pip) and pygraphviz (installable with conda).
 
 In the resulting .dot file, it helps to comment out (//) the "subgraph" lines to allow
 the graph to arrange itself more freely. By default it creates a .png graphic, too, but I also include a version that creates a PDF with the call graph laid out more loosely.
