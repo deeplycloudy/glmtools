@@ -187,23 +187,12 @@ class GLMDataset(OneToManyTraversal):
         self.ev_dim = 'number_of_events'
         self.fl_dim = 'number_of_flashes'
 
-        idx = {self.gr_dim: ['group_parent_flash_id', 'group_id',
-                             'group_time_offset',
-                             'group_lat', 'group_lon'],
-               self.ev_dim: ['event_parent_group_id', 'event_id',
-                             'event_time_offset',
-                             'event_lat', 'event_lon'],
-               self.fl_dim: ['flash_id',
-                             'flash_time_offset_of_first_event',
-                             'flash_time_offset_of_last_event',
-                             'flash_lat', 'flash_lon']}
-
         self.entity_ids = ['flash_id', 'group_id', 'event_id']
         self.parent_ids = ['group_parent_flash_id', 'event_parent_group_id']
 
         if calculate_parent_child:
             # sets self.dataset
-            super().__init__(dataset.set_index(**idx),
+            super().__init__(dataset,
                              self.entity_ids, self.parent_ids)
             self.__init_parent_child_data()
             self.__init_fixed_grid_data()
