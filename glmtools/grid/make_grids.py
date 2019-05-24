@@ -17,7 +17,7 @@ from lmatools.grid.make_grids import FlashGridder
 from lmatools.grid.fixed import get_GOESR_coordsys
 from lmatools.grid.density_to_files import (accumulate_points_on_grid,
     accumulate_points_on_grid_sdev, accumulate_energy_on_grid,
-    point_density, extent_density, project,
+    point_density, extent_density, project, accumulate_minimum_on_grid,
     flashes_to_frames, flash_count_log, extract_events_for_flashes)
 from lmatools.stream.subset import broadcast
 import sys
@@ -232,7 +232,7 @@ class GLMGridder(FlashGridder):
 
         flash_outgrids, flash_framer = self.flash_pipeline_setup()
         (init_density_grid, extent_density_grid, footprint_grid,
-            # flashsize_std_grid
+            min_flash_area_grid, # flashsize_std_grid
             ) = flash_outgrids
 
         group_outgrids, group_framer = self.group_pipeline_setup()
@@ -255,6 +255,7 @@ class GLMGridder(FlashGridder):
             group_centroid_density_grid,
             group_footprint_grid,
             # groupsize_std_grid
+            min_flash_area_grid,
             )
         self.outgrids_3d = None
 
@@ -301,7 +302,8 @@ class GLMGridder(FlashGridder):
                                   'total_energy.nc',
                                   'group_extent.nc',
                                   'group_init.nc',
-                                  'group_area.nc',)
+                                  'group_area.nc',
+                                  'flash_area_min.nc')
         self.outfile_postfixes_3d = None
 
         self.field_names = ('flash_extent_density',
@@ -313,6 +315,7 @@ class GLMGridder(FlashGridder):
                        'group_extent_density',
                        'group_centroid_density',
                        'average_group_area',
+                       'minimum_flash_area',
                        )
 
         self.field_descriptions = ('Flash extent density',
@@ -324,6 +327,7 @@ class GLMGridder(FlashGridder):
                             'Group extent density',
                             'Group centroid density',
                             'Average group area',
+                            'Minimum flash area',
                             )
 
         # In some use cases, it's easier to calculate totals (for area or
@@ -347,11 +351,12 @@ class GLMGridder(FlashGridder):
             density_label,
             density_label,
             "km^2 per group",
+            "km^2",
             )
         self.field_units_3d = None
 
-        self.outformats = ('f',) * 8
-        self.outformats_3d = ('f',) * 8
+        self.outformats = ('f',) * len(self.field_units)
+        self.outformats_3d = ('f',) * len(self.field_units)
 
 
     def process_flashes(self, glm, lat_bnd=None, lon_bnd=None,
@@ -472,6 +477,7 @@ class GLMlutGridder(GLMGridder):
         init_density_grid   = np.zeros(grid_shape, dtype='float32')
         extent_density_grid = np.zeros(grid_shape, dtype='float32')
         footprint_grid      = np.zeros(grid_shape, dtype='float32')
+        min_area_grid       = np.zeros(grid_shape, dtype='float32')
 
         all_frames = []
         for i in range(n_frames):
@@ -490,12 +496,17 @@ class GLMlutGridder(GLMGridder):
             accum_footprint      = accumulate_energy_on_grid(
                 footprint_grid[:,:,i], xedge, yedge,
                 label='flash area', grid_frac_weights=False)
+            accum_min_area       = accumulate_minimum_on_grid(
+                min_area_grid[:,:,i], xedge, yedge,
+                label='min flash area', grid_frac_weights=False)
 
             init_density_target   = point_density(accum_init_density)
             extent_density_target = point_density(accum_extent_density,
                 weight_key='lutevent_flash_count', weight_flashes=False)
             mean_footprint_target = point_density(accum_footprint,
                 weight_key='lutevent_total_flash_area', weight_flashes=False)
+            min_area_target = point_density(accum_min_area,
+                weight_key='lutevent_min_flash_area', weight_flashes=False)
 
             broadcast_targets = (
                 project('init_lon', 'init_lat', 'init_alt', mapProj, geoProj,
@@ -504,6 +515,8 @@ class GLMlutGridder(GLMGridder):
                     extent_density_target, use_flashes=False),
                 project('lon', 'lat', 'alt', mapProj, geoProj,
                     mean_footprint_target, use_flashes=False),
+                project('lon', 'lat', 'alt', mapProj, geoProj,
+                    min_area_target, use_flashes=False),
                 )
             spew_to_density_types = broadcast( broadcast_targets )
 
@@ -516,7 +529,7 @@ class GLMlutGridder(GLMGridder):
                      flash_counter=frame_count_log, do_events='time')
 
         outgrids = (init_density_grid, extent_density_grid,
-            footprint_grid,
+            footprint_grid, min_area_grid,
             )
         return outgrids, framer
 
@@ -606,11 +619,11 @@ class GLMlutGridder(GLMGridder):
         #                'group_extent_density', 5
         #                'group_centroid_density', 6
         #                'average_group_area', 7
+        #                'min_flash_area', 8
         #                )
 
         self.divide_grids[3]=0
         self.divide_grids[7]=5
-
 
 
 def subdivide_bnd(bnd, delta, s=8):

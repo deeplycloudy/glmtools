@@ -182,11 +182,20 @@ def fast_fixed_grid_read_chunk(flash_data, target=None, base_date=None, nadir_lo
     x_lut = x_lut * 1.0e-6
     y_lut = y_lut * 1.0e-6
     corner_lut = corner_lut*1e-6
+    log.debug("event x y ranges")
+    log.debug(str((event_x.data.min(),event_x.data.max())))
+    log.debug(str((event_y.data.min(),event_y.data.max())))
+    log.debug("lut x y ranges")
+    log.debug(str((x_lut.min(),x_lut.max())))
+    log.debug(str((y_lut.min(),y_lut.max())))
     event_polys = quads_from_corner_lookup(x_lut, y_lut, corner_lut,
         event_x, event_y)
     # event_polys_inflated = event_polys
     # event_polys_inflated = quads_from_corner_lookup(x_lut, y_lut,
     #     corner_lut, event_x, event_y, inflate=1.02)
+    log.debug("event polys ranges")
+    log.debug(str((event_polys[:,:,0].min(),event_polys[:,:,0].max())))
+    log.debug(str((event_polys[:,:,1].min(),event_polys[:,:,1].max())))
 
     slicer = QuadMeshPolySlicer(mesh)
     # --- Split up the events ---
@@ -257,13 +266,15 @@ def replicate_and_weight_split_child_dataset_new(parent_data, split_child_datase
         parent_id='lutevent_id', split_child_parent_id='split_event_parent_event_id',
         names=['lutevent_id', 'lutevent_energy', 'lutevent_time_offset',
                'lutevent_count', 'lutevent_flash_count', 'lutevent_group_count',
-               'lutevent_total_flash_area', 'lutevent_total_group_area'],
+               'lutevent_total_flash_area', 'lutevent_total_group_area',
+               'lutevent_min_flash_area'],
         weights={'lutevent_energy':'split_event_area_fraction',
                  'lutevent_count': 'split_event_mesh_area_fraction',
                  'lutevent_flash_count': 'split_event_mesh_area_fraction',
                  'lutevent_group_count': 'split_event_mesh_area_fraction',
                  'lutevent_total_flash_area':'split_event_mesh_area_fraction',
                  'lutevent_total_group_area':'split_event_mesh_area_fraction',
+                 # 'lutevent_min_flash_area':'split_event_mesh_area_fraction',
                 }
         ):
     """
@@ -823,30 +834,50 @@ def _fake_lma_events_from_split_glm_lutevents(split_events, basedate):
                  ('lutevent_group_count', 'f4'),
                  ('lutevent_total_flash_area', 'f4'),
                  ('lutevent_total_group_area', 'f4'),
+                 ('lutevent_min_flash_area', 'f4'),
                  ]
 
-    event_np = np.empty_like(split_events.split_event_lon.data,
+    split_events['split_event_mesh_area_fraction'] = np.fabs(
+            split_events.split_event_mesh_area_fraction)
+
+    # In the case of overlapping events (due to a larger than jitter excursion)
+    # there will be multiple split events at each target grid cell. This is
+    # fine when accumulating, but when we want the minimum value on the target
+    # grid we need to pick that single value. Therefore, we group by target
+    # grid location and find the minimum
+    xi_max = split_events.split_event_mesh_x_idx.data.max()
+    xyidx = (split_events.split_event_mesh_y_idx * (xi_max+1) +
+                split_events.split_event_mesh_x_idx)
+    split_events['xyidx'] = xyidx
+    
+    grouped = split_events.groupby('xyidx')
+    min_data = grouped.min()
+    sum_data = grouped.sum()
+    mean_data = grouped.mean()
+
+    event_np = np.empty_like(min_data.split_event_lon.data,
         dtype=lut_split_event_dtype)
 
     if event_np.shape[0] == 0:
         # no data, nothing to do
         return event_np
 
-    event_np['flash_id'] = split_events.split_event_parent_event_id.data
-    event_np['lat'] = split_events.split_event_lat
-    event_np['lon'] = split_events.split_event_lon
+    event_np['flash_id'] = min_data.split_event_parent_event_id.data
+    event_np['lat'] = mean_data.split_event_lat
+    event_np['lon'] = mean_data.split_event_lon
     event_np['alt'] = 0.0
-    t_event = sec_since_basedate(split_events.split_lutevent_time_offset.data, basedate)
+    t_event = sec_since_basedate(min_data.split_lutevent_time_offset.data, basedate)
     event_np['time'] = t_event
-    event_np['power'] = split_events.split_lutevent_energy.data
-    event_np['mesh_frac'] = np.abs(split_events.split_event_mesh_area_fraction.data)
-    event_np['mesh_xi'] = split_events.split_event_mesh_x_idx.data
-    event_np['mesh_yi'] = split_events.split_event_mesh_y_idx.data
-    event_np['lutevent_count'] = split_events.split_lutevent_count.data
-    event_np['lutevent_flash_count'] = split_events.split_lutevent_flash_count.data
-    event_np['lutevent_group_count'] = split_events.split_lutevent_group_count.data
-    event_np['lutevent_total_flash_area'] = split_events.split_lutevent_total_flash_area.data
-    event_np['lutevent_total_group_area'] = split_events.split_lutevent_total_group_area.data
+    event_np['power'] = sum_data.split_lutevent_energy.data
+    event_np['mesh_frac'] = sum_data.split_event_mesh_area_fraction.data
+    event_np['mesh_xi'] = min_data.split_event_mesh_x_idx.data
+    event_np['mesh_yi'] = min_data.split_event_mesh_y_idx.data
+    event_np['lutevent_count'] = sum_data.split_lutevent_count.data
+    event_np['lutevent_flash_count'] = sum_data.split_lutevent_flash_count.data
+    event_np['lutevent_group_count'] = sum_data.split_lutevent_group_count.data
+    event_np['lutevent_total_flash_area'] = sum_data.split_lutevent_total_flash_area.data
+    event_np['lutevent_total_group_area'] = sum_data.split_lutevent_total_group_area.data
+    event_np['lutevent_min_flash_area'] = min_data.split_lutevent_min_flash_area.data
 
     return event_np
 

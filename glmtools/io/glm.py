@@ -453,6 +453,7 @@ def get_lutevents(dataset, scale_factor=28e-6, event_dim='number_of_events',
     # - Sum: event_energy, flash_area, group_area
     # - Mean: event_x, event_y
     # - Count: event_id; unique flash_id, group_id
+    # - Min: flash_area
     eventlut_dtype = [('lutevent_id', 'u8'),
                       ('lutevent_x', 'f8'),
                       ('lutevent_y', 'f8'),
@@ -462,7 +463,8 @@ def get_lutevents(dataset, scale_factor=28e-6, event_dim='number_of_events',
                       ('lutevent_group_count', 'f4'),
                       ('lutevent_total_flash_area', 'f8'),
                       ('lutevent_total_group_area', 'f8'),
-                      ('lutevent_time_offset', '<M8[ns]')
+                      ('lutevent_time_offset', '<M8[ns]'),
+                      ('lutevent_min_flash_area', 'f8')
                       ]
     def event_lut_iter(event_lut_groupby, flash_groupby, group_groupby):
         flash_groups = flash_groupby.groups
@@ -475,6 +477,8 @@ def get_lutevents(dataset, scale_factor=28e-6, event_dim='number_of_events',
                 for fid in flash_ids))
             total_group_area = sum((group_area[group_groups[gid]].sum()
                 for gid in group_ids))
+            min_flash_area = min((flash_area[flash_groups[fid]].min()
+                for fid in flash_ids))
             yield (xy_id,
                    event_x[evids].mean(),
                    event_y[evids].mean(),
@@ -484,7 +488,8 @@ def get_lutevents(dataset, scale_factor=28e-6, event_dim='number_of_events',
                    group_count,
                    total_flash_area,
                    total_group_area,
-                   product_time
+                   product_time,
+                   min_flash_area
                    )
 
     lut_iter = event_lut_iter(eventlut_groups,
