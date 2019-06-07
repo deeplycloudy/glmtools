@@ -32,4 +32,14 @@ z=np.zeros_like(x)
 lon,lat,alt=grs80lla.fromECEF(*geofixCS.toECEF(x,y,z))
 lon.shape = x.shape
 lat.shape = y.shape
+
+# Add the 2D arrays back to the original dataset and save to disk. 
+# This doesn't have the CF standard name metadata or unit information,
+# but that isn't too hard to add.
+
+import xarray as xr
+glm['longitude'] = xr.DataArray(lon, dims=('y', 'x'))
+glm['latitude'] = xr.DataArray(lat, dims=('y', 'x'))
+
+glm.to_netcdf('glm_aggregate.nc')
 ```
