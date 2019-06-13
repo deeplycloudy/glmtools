@@ -259,7 +259,7 @@ def fast_fixed_grid_read_chunk(flash_data, target=None, base_date=None, nadir_lo
             return fake_lma
     except KeyError as ke:
         err_txt = 'Skipping {0}\n    ... assuming a flash, group, or event with id {1} does not exist'
-        log.error(err_txt.format(glm.dataset.dataset_name, ke))
+        log.error(err_txt.format(flash_data.dataset_name, ke))
 
 
 def replicate_and_weight_split_child_dataset_new(parent_data, split_child_dataset,
@@ -850,34 +850,60 @@ def _fake_lma_events_from_split_glm_lutevents(split_events, basedate):
                 split_events.split_event_mesh_x_idx)
     split_events['xyidx'] = xyidx
     
-    grouped = split_events.groupby('xyidx')
-    min_data = grouped.min()
-    sum_data = grouped.sum()
-    mean_data = grouped.mean()
+    
+    # Grab just the variables needed for the calculations.
+    mean_data_in = split_events[['split_event_lon', 
+                                 'split_event_lat',
+                                 'xyidx'
+                               ]].to_dataframe()
+    sum_data_in = split_events[['split_lutevent_energy', 
+                           'split_event_mesh_area_fraction',
+                           'split_lutevent_count',
+                           'split_lutevent_group_count',
+                           'split_lutevent_flash_count',
+                           'split_lutevent_total_flash_area',
+                           'split_lutevent_total_group_area',
+                           'xyidx'
+                         ]].to_dataframe()
+    min_data_in = split_events[['split_event_parent_event_id',
+                                'split_lutevent_time_offset',
+                                'split_event_mesh_x_idx',
+                                'split_event_mesh_y_idx',
+                                'split_lutevent_min_flash_area',
+                                'xyidx'
+                                ]].to_dataframe()
+        
+    # grouped = split_events.groupby('xyidx')
+    # min_data = grouped.min()
+    # sum_data = grouped.sum()
+    # mean_data = grouped.mean()
 
-    event_np = np.empty_like(min_data.split_event_lon.data,
+    min_data = min_data_in.groupby('xyidx').min()
+    mean_data = mean_data_in.groupby('xyidx').mean()
+    sum_data = sum_data_in.groupby('xyidx').sum()
+    event_np = np.empty_like(mean_data.split_event_lon,#.data,
         dtype=lut_split_event_dtype)
 
     if event_np.shape[0] == 0:
         # no data, nothing to do
         return event_np
 
-    event_np['flash_id'] = min_data.split_event_parent_event_id.data
+    event_np['flash_id'] = min_data.split_event_parent_event_id#.data
     event_np['lat'] = mean_data.split_event_lat
     event_np['lon'] = mean_data.split_event_lon
     event_np['alt'] = 0.0
-    t_event = sec_since_basedate(min_data.split_lutevent_time_offset.data, basedate)
+    t_event = sec_since_basedate(min_data.split_lutevent_time_offset, basedate)#.data, basedate)
     event_np['time'] = t_event
-    event_np['power'] = sum_data.split_lutevent_energy.data
-    event_np['mesh_frac'] = sum_data.split_event_mesh_area_fraction.data
-    event_np['mesh_xi'] = min_data.split_event_mesh_x_idx.data
-    event_np['mesh_yi'] = min_data.split_event_mesh_y_idx.data
-    event_np['lutevent_count'] = sum_data.split_lutevent_count.data
-    event_np['lutevent_flash_count'] = sum_data.split_lutevent_flash_count.data
-    event_np['lutevent_group_count'] = sum_data.split_lutevent_group_count.data
-    event_np['lutevent_total_flash_area'] = sum_data.split_lutevent_total_flash_area.data
-    event_np['lutevent_total_group_area'] = sum_data.split_lutevent_total_group_area.data
-    event_np['lutevent_min_flash_area'] = min_data.split_lutevent_min_flash_area.data
+    event_np['power'] = sum_data.split_lutevent_energy#.data
+    event_np['mesh_frac'] = sum_data.split_event_mesh_area_fraction#.data
+    event_np['mesh_xi'] = min_data.split_event_mesh_x_idx#.data
+    event_np['mesh_yi'] = min_data.split_event_mesh_y_idx#.data
+    event_np['lutevent_count'] = sum_data.split_lutevent_count#.data
+    event_np['lutevent_flash_count'] = sum_data.split_lutevent_flash_count#.data
+    event_np['lutevent_group_count'] = sum_data.split_lutevent_group_count#.data
+    event_np['lutevent_total_flash_area'] = sum_data.split_lutevent_total_flash_area#.data
+    event_np['lutevent_total_group_area'] = sum_data.split_lutevent_total_group_area#.data
+    event_np['lutevent_min_flash_area'] = min_data.split_lutevent_min_flash_area#.data
 
     return event_np
 
