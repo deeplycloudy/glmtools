@@ -19,6 +19,8 @@ from lmatools.grid.density_to_files import (accumulate_points_on_grid,
     accumulate_points_on_grid_sdev, accumulate_energy_on_grid,
     point_density, extent_density, project, accumulate_minimum_on_grid,
     flashes_to_frames, flash_count_log, extract_events_for_flashes)
+from .accumulate import (select_dataset, accumulate_var_on_grid_direct_idx,
+    accumulate_minvar_on_grid_direct_idx)
 from lmatools.stream.subset import broadcast
 import sys
 
@@ -490,33 +492,45 @@ class GLMlutGridder(GLMGridder):
 #
             accum_init_density   = accumulate_points_on_grid(
                 init_density_grid[:,:,i], xedge, yedge, label='init')
-            accum_extent_density = accumulate_energy_on_grid(
-                extent_density_grid[:,:,i], xedge, yedge,
-                label='flash extent', grid_frac_weights=False)
-            accum_footprint      = accumulate_energy_on_grid(
-                footprint_grid[:,:,i], xedge, yedge,
-                label='flash area', grid_frac_weights=False)
-            accum_min_area       = accumulate_minimum_on_grid(
-                min_area_grid[:,:,i], xedge, yedge,
-                label='min flash area', grid_frac_weights=False)
+            # accum_extent_density = accumulate_energy_on_grid(
+            #     extent_density_grid[:,:,i], xedge, yedge,
+            #     label='flash extent', grid_frac_weights=False)
+            accum_extent_density = accumulate_var_on_grid_direct_idx(
+                    extent_density_grid[:,:,i],
+                    'lutevent_flash_count', 'mesh_xi', 'mesh_yi')
+            # accum_footprint      = accumulate_energy_on_grid(
+            #     footprint_grid[:,:,i], xedge, yedge,
+            #     label='flash area', grid_frac_weights=False)
+            accum_footprint = accumulate_var_on_grid_direct_idx(
+                    footprint_grid[:,:,i],
+                    'lutevent_total_flash_area', 'mesh_xi', 'mesh_yi')
+            # accum_min_area       = accumulate_minimum_on_grid(
+            #     min_area_grid[:,:,i], xedge, yedge,
+            #     label='min flash area', grid_frac_weights=False)
+            accum_min_area = accumulate_minvar_on_grid_direct_idx(
+                     min_area_grid[:,:,i],
+                    'lutevent_min_flash_area', 'mesh_xi', 'mesh_yi')
 
             init_density_target   = point_density(accum_init_density)
-            extent_density_target = point_density(accum_extent_density,
-                weight_key='lutevent_flash_count', weight_flashes=False)
-            mean_footprint_target = point_density(accum_footprint,
-                weight_key='lutevent_total_flash_area', weight_flashes=False)
-            min_area_target = point_density(accum_min_area,
-                weight_key='lutevent_min_flash_area', weight_flashes=False)
+            # extent_density_target = point_density(accum_extent_density,
+            #     weight_key='lutevent_flash_count', weight_flashes=False)
+            # mean_footprint_target = point_density(accum_footprint,
+                # weight_key='lutevent_total_flash_area', weight_flashes=False)
+            # min_area_target = point_density(accum_min_area,
+                # weight_key='lutevent_min_flash_area', weight_flashes=False)
 
             broadcast_targets = (
                 project('init_lon', 'init_lat', 'init_alt', mapProj, geoProj,
                     init_density_target, use_flashes=True),
-                project('lon', 'lat', 'alt', mapProj, geoProj,
-                    extent_density_target, use_flashes=False),
-                project('lon', 'lat', 'alt', mapProj, geoProj,
-                    mean_footprint_target, use_flashes=False),
-                project('lon', 'lat', 'alt', mapProj, geoProj,
-                    min_area_target, use_flashes=False),
+                # project('lon', 'lat', 'alt', mapProj, geoProj,
+                #     extent_density_target, use_flashes=False),
+                select_dataset(accum_extent_density, use_event_data=True),
+                # project('lon', 'lat', 'alt', mapProj, geoProj,
+                #     mean_footprint_target, use_flashes=False),
+                select_dataset(accum_footprint, use_event_data=True),
+                # project('lon', 'lat', 'alt', mapProj, geoProj,
+                #     min_area_target, use_flashes=False),
+                select_dataset(accum_min_area, use_event_data=True),
                 )
             spew_to_density_types = broadcast( broadcast_targets )
 

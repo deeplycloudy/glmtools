@@ -852,6 +852,9 @@ def _fake_lma_events_from_split_glm_lutevents(split_events, basedate):
     
     
     # Grab just the variables needed for the calculations.
+    # Also convert to a dataframe to use the pandas groupby, which is
+    # substantially faster than the xarray groupby, per
+    # https://github.com/pydata/xarray/issues/659
     mean_data_in = split_events[['split_event_lon', 
                                  'split_event_lat',
                                  'xyidx'
