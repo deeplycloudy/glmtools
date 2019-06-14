@@ -167,17 +167,17 @@ class GLMGridder(FlashGridder):
             self.gridspec_locals())
 
         grid_shape = (xedge.shape[0]-1, yedge.shape[0]-1, n_frames)
-        event_density_grid  = np.zeros(grid_shape, dtype='float32')
+        # event_density_grid  = np.zeros(grid_shape, dtype='float32')
         total_energy_grid   = np.zeros(grid_shape, dtype='float32')
 
         all_frames = []
         for i in range(n_frames):
-            accum_event_density  = accumulate_points_on_grid(
-                event_density_grid[:,:,i], xedge, yedge,
-                label='event', grid_frac_weights=True)
-            event_density_target  = extent_density(x0, y0, dx, dy,
-                accum_event_density,
-                event_grid_area_fraction_key=event_grid_area_fraction_key)
+            # accum_event_density  = accumulate_points_on_grid(
+            #     event_density_grid[:,:,i], xedge, yedge,
+            #     label='event', grid_frac_weights=True)
+            # event_density_target  = extent_density(x0, y0, dx, dy,
+            #     accum_event_density,
+            #     event_grid_area_fraction_key=event_grid_area_fraction_key)
 
             # total_energy is built from split_event_energy, which has
             # already divided up the event energy into the sub-event
@@ -191,8 +191,8 @@ class GLMGridder(FlashGridder):
                 weight_key='power', weight_flashes=False)
 
             broadcast_targets = (
-                 project('lon', 'lat', 'alt', mapProj, geoProj,
-                     event_density_target, use_flashes=False),
+                 # project('lon', 'lat', 'alt', mapProj, geoProj,
+                 #     event_density_target, use_flashes=False),
                  project('lon', 'lat', 'alt', mapProj, geoProj,
                      total_energy_target, use_flashes=False),
             )
@@ -206,7 +206,8 @@ class GLMGridder(FlashGridder):
                      time_key='start', time_edges_datetime=self.t_edges,
                      flash_counter=frame_count_log)
 
-        outgrids = (event_density_grid, total_energy_grid)
+        # outgrids = (event_density_grid, total_energy_grid)
+        outgrids = (total_energy_grid,)
         return outgrids, framer
 
     def pipeline_setup(self):
@@ -244,12 +245,13 @@ class GLMGridder(FlashGridder):
             ) = group_outgrids
 
         event_outgrids, event_framer = self.event_pipeline_setup()
-        event_density_grid, total_energy_grid = event_outgrids
+        # event_density_grid, total_energy_grid = event_outgrids
+        total_energy_grid, = event_outgrids
 
         self.outgrids = (
             extent_density_grid,
             init_density_grid,
-            event_density_grid,
+            # event_density_grid,
             footprint_grid,
             # flashsize_std_grid,
             total_energy_grid,
@@ -298,7 +300,7 @@ class GLMGridder(FlashGridder):
 
         self.outfile_postfixes = ('flash_extent.nc',
                                   'flash_init.nc',
-                                  'source.nc',
+                                  # 'source.nc',
                                   'footprint.nc',
                                   # 'flashsize_std.nc',
                                   'total_energy.nc',
@@ -310,7 +312,7 @@ class GLMGridder(FlashGridder):
 
         self.field_names = ('flash_extent_density',
                        'flash_centroid_density',
-                       'event_density',
+                       # 'event_density',
                        'average_flash_area',
                        # 'standard_deviation_flash_area',
                        'total_energy',
@@ -322,7 +324,7 @@ class GLMGridder(FlashGridder):
 
         self.field_descriptions = ('Flash extent density',
                             'Flash initiation density',
-                            'Event density',
+                            # 'Event density',
                             'Average flash area',
                             # 'Standard deviation of flash area',
                             'Total radiant energy',
@@ -346,7 +348,7 @@ class GLMGridder(FlashGridder):
         self.field_units = (
             density_label,
             density_label,
-            density_label,
+            # density_label,
             "km^2 per flash",
             # "km^2",
             "J per flash",
@@ -417,33 +419,37 @@ class GLMlutGridder(GLMGridder):
             self.gridspec_locals())
 
         grid_shape = (xedge.shape[0]-1, yedge.shape[0]-1, n_frames)
-        event_density_grid  = np.zeros(grid_shape, dtype='float32')
+        # event_density_grid  = np.zeros(grid_shape, dtype='float32')
         total_energy_grid   = np.zeros(grid_shape, dtype='float32')
 
         all_frames = []
         for i in range(n_frames):
-            accum_event_density  = accumulate_energy_on_grid(
-                event_density_grid[:,:,i], xedge, yedge,
-                label='event extent', grid_frac_weights=False)
-            event_density_target  = point_density(accum_event_density,
-                weight_key='lutevent_count', weight_flashes=False)
+            # accum_event_density  = accumulate_energy_on_grid(
+            #     event_density_grid[:,:,i], xedge, yedge,
+            #     label='event extent', grid_frac_weights=False)
+            # event_density_target  = point_density(accum_event_density,
+            #     weight_key='lutevent_count', weight_flashes=False)
 
             # total_energy is built from split_event_energy, which has
             # already divided up the event energy into the sub-event
             # corresponding to each pixel. We don't need to weight by the
             # grid fractional area. We just need to sum the  'power' variable
             # which mimic_lma assigns the values of split_event_energy.
-            accum_total_energy   = accumulate_energy_on_grid(
-                total_energy_grid[:,:,i], xedge, yedge,
-                label='total energy',  grid_frac_weights=False)
-            total_energy_target = point_density(accum_total_energy,
-                weight_key='power', weight_flashes=False)
+            # accum_total_energy   = accumulate_energy_on_grid(
+            #     total_energy_grid[:,:,i], xedge, yedge,
+            #     label='total energy',  grid_frac_weights=False)
+            accum_total_energy = accumulate_var_on_grid_direct_idx(
+                    total_energy_grid[:,:,i],
+                    'power', 'mesh_xi', 'mesh_yi')
+            # total_energy_target = point_density(accum_total_energy,
+            #     weight_key='power', weight_flashes=False)
 
             broadcast_targets = (
-                 project('lon', 'lat', 'alt', mapProj, geoProj,
-                     event_density_target, use_flashes=False),
-                 project('lon', 'lat', 'alt', mapProj, geoProj,
-                     total_energy_target, use_flashes=False),
+                 # project('lon', 'lat', 'alt', mapProj, geoProj,
+                 #     event_density_target, use_flashes=False),
+                 # project('lon', 'lat', 'alt', mapProj, geoProj,
+                 #     total_energy_target, use_flashes=False),
+                 select_dataset(accum_total_energy, use_event_data=True),
             )
             spew_to_density_types = broadcast( broadcast_targets )
 
@@ -455,7 +461,8 @@ class GLMlutGridder(GLMGridder):
                      time_key='time', time_edges_datetime=self.t_edges,
                      flash_counter=frame_count_log, do_events='time')
 
-        outgrids = (event_density_grid, total_energy_grid)
+        # outgrids = (event_density_grid, total_energy_grid)
+        outgrids = (total_energy_grid,)
         return outgrids, framer
 
     def flash_pipeline_setup(self):
@@ -580,26 +587,34 @@ class GLMlutGridder(GLMGridder):
 #
             accum_init_density   = accumulate_points_on_grid(
                 init_density_grid[:,:,i], xedge, yedge, label='init')
-            accum_extent_density = accumulate_energy_on_grid(
-                extent_density_grid[:,:,i], xedge, yedge,
-                label='group extent', grid_frac_weights=False)
-            accum_footprint      = accumulate_energy_on_grid(
-                footprint_grid[:,:,i], xedge, yedge,
-                label='group area', grid_frac_weights=False)
+            # accum_extent_density = accumulate_energy_on_grid(
+            #     extent_density_grid[:,:,i], xedge, yedge,
+            #     label='group extent', grid_frac_weights=False)
+            accum_extent_density = accumulate_var_on_grid_direct_idx(
+                    extent_density_grid[:,:,i],
+                    'lutevent_group_count', 'mesh_xi', 'mesh_yi')
+            # accum_footprint      = accumulate_energy_on_grid(
+            #     footprint_grid[:,:,i], xedge, yedge,
+            #     label='group area', grid_frac_weights=False)
+            accum_footprint = accumulate_var_on_grid_direct_idx(
+                    footprint_grid[:,:,i],
+                    'lutevent_total_group_area', 'mesh_xi', 'mesh_yi')
 
             init_density_target   = point_density(accum_init_density)
-            extent_density_target = point_density(accum_extent_density,
-                weight_key='lutevent_group_count', weight_flashes=False)
-            mean_footprint_target = point_density(accum_footprint,
-                weight_key='lutevent_total_group_area', weight_flashes=False)
+            # extent_density_target = point_density(accum_extent_density,
+                # weight_key='lutevent_group_count', weight_flashes=False)
+            # mean_footprint_target = point_density(accum_footprint,
+                # weight_key='lutevent_total_group_area', weight_flashes=False)
 
             broadcast_targets = (
                 project('init_lon', 'init_lat', 'init_alt', mapProj, geoProj,
                     init_density_target, use_flashes=True),
-                project('lon', 'lat', 'alt', mapProj, geoProj,
-                    extent_density_target, use_flashes=False),
-                project('lon', 'lat', 'alt', mapProj, geoProj,
-                    mean_footprint_target, use_flashes=False),
+                # project('lon', 'lat', 'alt', mapProj, geoProj,
+                    # extent_density_target, use_flashes=False),
+                select_dataset(accum_extent_density, use_event_data=True),                    
+                # project('lon', 'lat', 'alt', mapProj, geoProj,
+                    # mean_footprint_target, use_flashes=False),
+                select_dataset(accum_footprint, use_event_data=True),                    
                 )
             spew_to_density_types = broadcast( broadcast_targets )
 
@@ -626,18 +641,18 @@ class GLMlutGridder(GLMGridder):
         log.info('Setting up to divide area grids by extent density grids')
         # self.field_names = ('flash_extent_density', 0
         #                'flash_centroid_density', 1
-        #                'event_density', 2
-        #                'average_flash_area', 3
+        # #                'event_density', 2 now 1
+        #                'average_flash_area', 3 now 2
         #                # 'standard_deviation_flash_area',
-        #                'total_energy', 4
-        #                'group_extent_density', 5
-        #                'group_centroid_density', 6
-        #                'average_group_area', 7
-        #                'min_flash_area', 8
+        #                'total_energy', 4 now 3
+        #                'group_extent_density', 5 now 4
+        #                'group_centroid_density', 6 now 5
+        #                'average_group_area', 7 now 6
+        #                'min_flash_area', 8 now 7
         #                )
 
-        self.divide_grids[3]=0
-        self.divide_grids[7]=5
+        self.divide_grids[2]=0
+        self.divide_grids[6]=4
 
 
 def subdivide_bnd(bnd, delta, s=8):
