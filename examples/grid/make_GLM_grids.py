@@ -224,8 +224,14 @@ def grid_setup(args):
                 "goes_position and dx. For goes_sector='meso', also specify "
                 "ctr_lon and ctr_lat. Without goes_sector, also include width "
                 "and height.")
-        x_bnd = (np.arange(nx, dtype='float') - nx/2.0)*dx + x_ctr + 0.5*dx
-        y_bnd = (np.arange(ny, dtype='float') - ny/2.0)*dy + y_ctr + 0.5*dy
+        # Need to use +1 here to convert to xedge, yedge expected by gridder
+        # instead of the pixel centroids that will result in the final image
+        nx += 1
+        ny += 1
+        x_bnd = (np.arange(nx, dtype='float') - (nx)/2.0)*dx + x_ctr + 0.5*dx
+        y_bnd = (np.arange(ny, dtype='float') - (ny)/2.0)*dy + y_ctr + 0.5*dy
+        log.debug(("initial x,y_ctr", x_ctr, y_ctr))
+        log.debug(("initial x,y_bnd", x_bnd.shape, y_bnd.shape))
         x_bnd = np.asarray([x_bnd.min(), x_bnd.max()])
         y_bnd = np.asarray([y_bnd.min(), y_bnd.max()])
         
