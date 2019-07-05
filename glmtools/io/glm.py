@@ -187,23 +187,12 @@ class GLMDataset(OneToManyTraversal):
         self.ev_dim = 'number_of_events'
         self.fl_dim = 'number_of_flashes'
 
-        idx = {self.gr_dim: ['group_parent_flash_id', 'group_id',
-                             'group_time_offset',
-                             'group_lat', 'group_lon'],
-               self.ev_dim: ['event_parent_group_id', 'event_id',
-                             'event_time_offset',
-                             'event_lat', 'event_lon'],
-               self.fl_dim: ['flash_id',
-                             'flash_time_offset_of_first_event',
-                             'flash_time_offset_of_last_event',
-                             'flash_lat', 'flash_lon']}
-
         self.entity_ids = ['flash_id', 'group_id', 'event_id']
         self.parent_ids = ['group_parent_flash_id', 'event_parent_group_id']
 
         if calculate_parent_child:
             # sets self.dataset
-            super().__init__(dataset.set_index(**idx),
+            super().__init__(dataset,
                              self.entity_ids, self.parent_ids)
             self.__init_parent_child_data()
             self.__init_fixed_grid_data()
@@ -263,6 +252,32 @@ class GLMDataset(OneToManyTraversal):
                         self.dataset.group_area.units))
         return fixed_flash_area, fixed_group_area
 
+    def _check_event_xy(self, x_range=(-0.1349, 0.1349),
+                              y_range=(-0.1349, 0.1349)):
+        """ Return the flash IDs corresponding to those events whose fixed grid
+            coordinates are within the expected range. The default values for
+            x_range and y_range are the maximum range covered by the GLM corner
+            point lookup table. If values larger than this are passed to this
+            function they will be clipped to these values.
+        """
+        x_valid = y_valid = (-0.1349, 0.1349)
+        x_range = (max((x_valid[0], x_range[0])),
+                   min((x_valid[1], x_range[1])))
+        y_range = (max((y_valid[0], y_range[0])),
+                   min((y_valid[1], y_range[1])))
+        log.debug("Subsetting bad events with final ranges {0}".format(
+            (x_range, y_range)))
+        good = np.ones(self.dataset.event_id.shape[0], dtype=bool)
+        event_x = self.dataset.event_x.data
+        good &= ((event_x < x_range[1]) & (event_x > x_range[0]))
+        event_y = self.dataset.event_y.data
+        good &= ((event_y < y_range[1]) & (event_y > y_range[0]))
+        flash_ids = self.dataset.event_parent_flash_id.data[good]
+        bad_ids = np.unique(self.dataset.event_parent_flash_id.data[~good])
+        log.debug('Flash IDs with bad event x,y are {0}'.format(bad_ids))
+        # for bad_id in bad_ids:
+        #     log.debug("{0}".format(self.get_flashes([bad_id])))
+        return np.unique(flash_ids)
 
     @property
     def fov_bounds(self):
@@ -274,7 +289,7 @@ class GLMDataset(OneToManyTraversal):
 
 
     def subset_flashes(self, lon_range=None, lat_range=None,
-               x_range=None, y_range=None,
+               x_range=None, y_range=None, check_event_xy=True,
                min_events=None, min_groups=None):
         """ Subset the dataset based on longitude, latitude, the minimum
             number of events per flash, and/or the minimum number of groups
@@ -291,6 +306,11 @@ class GLMDataset(OneToManyTraversal):
             If either or both of x_range and y_range are not None, the flash
             flash lon,lat is converted to fixed grid coords and filtered on
             that basis in addition to any other filtering.
+
+            If check_event_xy is True (default), filter flashes to ensure
+            event_x and event_y are within the expected field of view. If
+            provided, x_range and y_range are used, but default to and are never
+            wider than +/- 0.1349 radians.
         """
         good = np.ones(self.dataset.flash_id.shape[0], dtype=bool)
         flash_data = self.dataset
@@ -313,6 +333,15 @@ class GLMDataset(OneToManyTraversal):
             good &= (flash_data.flash_child_group_count >= min_groups).data
 
         flash_ids = flash_data.flash_id[good].data
+        
+        if check_event_xy:
+            check_event_kw = {}
+            if x_range is not None: check_event_kw['x_range'] = x_range
+            if y_range is not None: check_event_kw['y_range'] = y_range
+            # log.debug("Subsetting bad events with override ranges {0}".format(
+                # check_event_kw))
+            good_event_flash_ids = self._check_event_xy(**check_event_kw)
+        flash_ids = list(set(flash_ids) and set(good_event_flash_ids))
         return self.get_flashes(flash_ids)
 
     def get_flashes(self, flash_ids):

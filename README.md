@@ -2,6 +2,8 @@
 
 GOES Geostationary Lightning Mapper Tools
 
+[![DOI](https://zenodo.org/badge/71308485.svg)](https://zenodo.org/badge/latestdoi/71308485)
+
 ## Installation
 glmtools requires Python 3.5+ and provides a conda `environment.yml` for the key dependencies.
 
