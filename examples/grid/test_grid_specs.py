@@ -47,6 +47,9 @@ def check_against_pug(check, pug_spec):
     """ check is an xarray dataset.
         pug_spec is as returned by get_GOESR_grid
     """
+    x = check.x.data
+    y = check.y.data
+    
     nx_valid = pug_spec['pixelsEW']
     ny_valid = pug_spec['pixelsNS']
     nx_actual, ny_actual = check.x.shape[0], check.y.shape[0]
@@ -55,27 +58,33 @@ def check_against_pug(check, pug_spec):
 
     # A simple delta of the first and second has some numerical noise in
     # it, but taking the mean eliminates it.
-    dx_actual = (check.x[1:] - check.x[:-1]).mean()
-    dy_actual = (check.y[1:] - check.y[:-1]).mean()
-    np.testing.assert_allclose(dx_actual, pug_spec['resolution'])
-    np.testing.assert_allclose(dy_actual, pug_spec['resolution'])
+    dx_actual = np.abs((x[1:] - x[:-1]).mean())
+    dy_actual = np.abs((y[1:] - y[:-1]).mean())
+    np.testing.assert_allclose(dx_actual, pug_spec['resolution'], rtol=1e-5)
+    np.testing.assert_allclose(dy_actual, pug_spec['resolution'], rtol=1e-5)
 
     # the x, y coordinates are the center points of the pixels, so
     # the span of the image (to the pixel corners) is an extra pixel
     # in each direction (1/2 pixel on each edge)
-    xspan_actual = check.x[-1] - check.x[0] + dx_actual
-    yspan_actual = check.y[-1] - check.y[0] + dy_actual
-    np.testing.assert_allclose(xspan_actual, pug_spec['spanEW'])
-    np.testing.assert_allclose(yspan_actual, pug_spec['spanNS'])
+    xmin, xmax = x.min(), x.max()
+    ymin, ymax = y.min(), y.max()
+    xspan_actual = np.abs(xmax - xmin) + dx_actual
+    yspan_actual = np.abs(ymax - ymin) + dy_actual
+    np.testing.assert_allclose(xspan_actual, pug_spec['spanEW'], rtol=1e-5)
+    np.testing.assert_allclose(yspan_actual, pug_spec['spanNS'], rtol=1e-5)
     
-    x_center_right = check.x[-1]-((xspan_actual-dx_actual)/2.0)
-    y_center_right = check.y[-1]-((yspan_actual-dy_actual)/2.0)
-    x_center_left = check.x[0]+((xspan_actual-dx_actual)/2.0)
-    y_center_left = check.y[0]+((yspan_actual-dy_actual)/2.0)
-    np.testing.assert_allclose(x_center_right, pug_spec['centerEW'])
-    np.testing.assert_allclose(y_center_right, pug_spec['centerNS'])
-    np.testing.assert_allclose(x_center_left, pug_spec['centerEW'])
-    np.testing.assert_allclose(y_center_left, pug_spec['centerNS'])
+    x_center_right = xmax -((xspan_actual-dx_actual)/2.0)
+    y_center_right = ymax -((yspan_actual-dy_actual)/2.0)
+    x_center_left = xmin + ((xspan_actual-dx_actual)/2.0)
+    y_center_left = ymin + ((yspan_actual-dy_actual)/2.0)
+    np.testing.assert_allclose(x_center_right, pug_spec['centerEW'], 
+        rtol=1e-5, atol=1e-8)
+    np.testing.assert_allclose(y_center_right, pug_spec['centerNS'], 
+        rtol=1e-5, atol=1e-8)
+    np.testing.assert_allclose(x_center_left, pug_spec['centerEW'], 
+        rtol=1e-5, atol=1e-8)
+    np.testing.assert_allclose(y_center_left, pug_spec['centerNS'], 
+        rtol=1e-5, atol=1e-8)
 
 def test_conus_size():
     """
@@ -128,5 +137,5 @@ def test_meso_size():
         # For a mesoscale domain centered on the satellite subpoint the
         # east and west deltas should be symmetric, and the center should
         # be directly below the satellite.
-        np.testing.assert_allclose(check.x[-1], -check.x[0])
-        np.testing.assert_allclose(check.y[-1], -check.y[0])
+        np.testing.assert_allclose(check.x[-1], -check.x[0], rtol=1e-5)
+        np.testing.assert_allclose(check.y[-1], -check.y[0], rtol=1e-5)
