@@ -80,7 +80,7 @@ glm_scaling = {
     'average_group_area':{'dtype':'uint16', 
         'scale_factor':1.0, 'add_offset':0.0},
     'total_energy':{'dtype':'uint16', 
-        'scale_factor':1.52597e-15, 'add_offset':0.0},
+        'scale_factor':1.52597e-6, 'add_offset':0.0,},
 }
 
 def get_goes_imager_subpoint_vars(nadir_lon):
