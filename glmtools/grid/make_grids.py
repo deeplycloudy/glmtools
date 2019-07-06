@@ -343,7 +343,7 @@ class GLMGridder(FlashGridder):
             density_label,
             "km^2 per flash",
             # "km^2",
-            "J",
+            "nJ",
             density_label,
             density_label,
             "km^2 per group",

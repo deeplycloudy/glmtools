@@ -32,8 +32,8 @@ display_params['group_extent_density'] = {
 display_params['event_density']=display_params['group_extent_density']
 
 display_params['total_energy'] = {
-    'product_label':"GOES-16 GLM Total Energy (J)",
-    'glm_norm':LogNorm(vmin=1e-17, vmax=1e-12),
+    'product_label':"GOES-16 GLM Total Energy (nJ)",
+    'glm_norm':LogNorm(vmin=1e-8, vmax=1e-3),
     'file_tag':'total_energy',
     'format_string':'{0:3.1e}'
 }
