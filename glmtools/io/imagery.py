@@ -124,7 +124,11 @@ def get_goes_imager_proj(nadir_lon):
     meta['longitude_of_projection_origin'] = nadir_lon
     meta['sweep_angle_axis'] = "x"
     
-    var = xr.DataArray(-2147483647, attrs=meta, name='goes_imager_projection')
+    encoding = {}
+    encoding['dtype'] = 'i4'
+    
+    var = xr.DataArray(-2147483647, attrs=meta, name='goes_imager_projection',
+                       encoding=encoding)
     return var
 
 def get_goes_imager_all_valid_dqf(dims, n):
