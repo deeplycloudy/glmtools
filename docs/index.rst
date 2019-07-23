@@ -43,6 +43,7 @@ to install that package from source. From some working directory (e.g.,
    git clone https://github.com/deeplycloudy/stormdrain.git
    git clone https://github.com/deeplycloudy/glmtools.git
    cd glmtools
+   git checkout unifiedgridfile
    conda env create -f environment.yml
    source activate glmval
    pip install pyclipper
