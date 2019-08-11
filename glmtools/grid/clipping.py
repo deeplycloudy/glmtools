@@ -665,8 +665,10 @@ def run_pool_map(f,a, max_workers=4, chunksize=100):
     max_workers -- number of subprocesses
     chunksize -- number of arguments to send to each subprocess
     """
-    pool = ProcessPoolExecutor(max_workers=max_workers)
-    return pool.map(f,a,chunksize=chunksize)
+    with ProcessPoolExecutor(max_workers=max_workers) as pool:
+        results = pool.map(f,a,chunksize=chunksize)
+
+    return results
 # def dummy_work(a):
 #     return a
 # value = run_pool_map(dummy_work, list(range(10)))
