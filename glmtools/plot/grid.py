@@ -91,11 +91,11 @@ def plot_glm_grid(fig, glm_grids, tidx, fields, subplots=(2,3),
         ax.text(limits[0]+.02*(limits[1]-limits[0]), limits[2]+.02*(limits[3]-limits[2]), 
             tidx.isoformat().replace('T', ' ')+' UTC'+
             label_string.format(glm_field_max, product_label), 
-            transform = ax.transAxes,
+            transform = ax.transAxes, fontsize=10,
             color=map_color)
         ax.text(limits[0]+.02*(limits[1]-limits[0]),
-                limits[3]-.08*(limits[3]-limits[2]),
-                panel_labels[fi],
+                limits[3]-.1*(limits[3]-limits[2]),
+                panel_labels[fi], fontweight='bold', fontsize=10,
                 transform = ax.transAxes,
                 color=map_color)
 
