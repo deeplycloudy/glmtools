@@ -808,7 +808,6 @@ def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
         process_flash_kwargs['lat_bnd'] = kwargs['y_bnd']
         subgrids = [((0, 0), kwargs, process_flash_kwargs, out_kwargs, pads)]
     elif 'fixed_grid' in process_flash_kwargs:
-        out_kwargs['calculate_2D_lonlat'] = False
         subgrids = subdivided_fixed_grid(kwargs, process_flash_kwargs,
                                          out_kwargs, s=subdivide_grid)
     else:
