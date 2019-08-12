@@ -40,17 +40,21 @@ there is no need to perform this step; one would presumably start with L0 data
 if the goal were to re-navigate the data from the satellite pointing data.
 
 """
-
+import logging
+log = logging.getLogger(__name__)
+log.addHandler(logging.NullHandler())
 
 import pickle
 import tables
 import numpy as np
 from sklearn.neighbors import KDTree
-from scipy.interpolate import LinearNDInterpolator
+from scipy.interpolate import LinearNDInterpolator, NearestNDInterpolator
+
+extrap_warning = 'pixel outside domain of known corner points; extrapolating'
 
 def quads_from_corner_lookup(lon, lat, corner_points, 
                              pixel_lon, pixel_lat, nadir_lon=0.0,
-                             inflate=1.0):
+                             inflate=1.0, extrapolate=True):
     """
     Given corner offset data in corner_points located at ctr_lon, ctr_lat
     return interpolated corner offsets 
@@ -66,10 +70,15 @@ def quads_from_corner_lookup(lon, lat, corner_points,
     nadir_lon: geostationary satellite longitude. Added to lon and
         lat (or subtracted from pixel locations) so as to shift the
         lookup table to the correct earth-relative position.
-                             
+    inflate: multiply the corner point delta by this amount.
+    extrapolate: if True (default) and pixel is outside the domain of lon and
+        lat, use the nearest neighbor in corner_points instead
+
     Returns
     quads: array, shape (P,4,2) of corner locations for each pixel.
     """
+    did_extrap = False
+
     n_corners = corner_points.shape[-2]
     n_coords = corner_points.shape[-1]
 
@@ -88,8 +97,23 @@ def quads_from_corner_lookup(lon, lat, corner_points,
                                 #, bounds_error=True)
         dlon = corner_interp_lon(pixel_loc)
         dlat = corner_interp_lat(pixel_loc)
+        if extrapolate:
+            out_lon = np.isnan(dlon)
+            out_lat = np.isnan(dlat)
+            if out_lon.sum() > 0:
+                did_extrap = True
+                corner_extrap_lon = NearestNDInterpolator(grid_loc,
+                                    corner_points[:,:,ci,0].flatten())
+                dlon[out_lon] = corner_extrap_lon(pixel_loc[out_lon])
+            if out_lat.sum() > 0:
+                did_extrap = True
+                corner_extrap_lat = NearestNDInterpolator(grid_loc,
+                                    corner_points[:,:,ci,1].flatten())
+                dlat[out_lat] = corner_extrap_lat(pixel_loc[out_lat])
         quads[:, ci, 0] = pixel_lon + dlon*inflate
         quads[:, ci, 1] = pixel_lat + dlat*inflate
+    if did_extrap:
+        log.warning(extrap_warning)
     return quads
     
 def read_official_corner_lut(filename, y_grid='lat_grid', x_grid='lon_grid',
