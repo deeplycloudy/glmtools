@@ -31,36 +31,11 @@ the full footprint of each event, group, and flash.
 
 ### Create gridded NetCDF imagery
 
-Use the script in `examples/grid/make_GLM_grids.py`. For instance, the following command
-will grid one minute of data (3 GLM files) on the ABI fixed grid in the CONUS sector at 2
-km resolution. These images will overlay precisely on the ABI cloud tops, and will have
-parallax with respect to ground for all the same reasons ABI does.
-
-```bash 
-python make_GLM_grids.py -o /path/to/output/ --fixed_grid --split_events \
---goes_position east --goes_sector conus --dx=2.0 --dy=2.0 --ctr_lon 0.0 --ctr_lat 0.0 \
---start=2018-01-04T05:37:00 --end=2018-01-04T05:38:00 \
-OR_GLM-L2-LCFA_G16_s20180040537000_e20180040537200_c20180040537226.nc \
-OR_GLM-L2-LCFA_G16_s20180040537200_e20180040537400_c20180040537419.nc \
-OR_GLM-L2-LCFA_G16_s20180040537400_e20180040538000_c20180040538022.nc \
-```
-
-To start with, look at the flash extent density and total energy grids.
-
-`ctr_lon` and `ctr_lat` aren't used, but are required anyway. Fixing this would
-make a nice first contribution!
-
-Removing the --split_events flag and setting the grid to 10 km allows for gridding
-of the raw point data, and will run much faster. Finer resolutions will cause gaps in
-flash extent density because the point data are spaced about 8-12 km apart.
-Note that these grids will either have gaps or will double-count events along
-GLM pixel borders, because there is no one grid resolution which exactly
-matches the GLM pixel size as it varies with earth distortion over the field
-of view.
+Use the script in `examples/grid/make_GLM_grids.py`. See the documentation in `docs/index.rst` for complete instructions and example commands.
 
 ### Interactively plot raw flash data
 
-See the examples folder. `plot_glm_test_data.ipynb` is a good place to start.
+See the examples folder. `basic_read_plot.ipynb` is a good place to start.
 
 ### Reduce the dataset to a few flashes
 

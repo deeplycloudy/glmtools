@@ -292,22 +292,24 @@ class GLMGridder(FlashGridder):
         if self.proj_name=='latlong':
             density_units = "grid"
         elif self.proj_name == 'geos':
-            density_units = '{0:7d} radians^2'.format(int(dx*dy))
+            density_units = 'nominal {0:7d} microradian^2'.format(int(dx*dy*1e12))
         else:
             density_units = "{0:5.1f} km^2".format(dx*spatial_scale_factor * dy*spatial_scale_factor).lstrip()
         time_units = "{0:5.1f} min".format(self.frame_interval/60.0).lstrip()
         density_label = 'Count per ' + density_units + " pixel per "+ time_units
 
         self.outfile_postfixes = ('flash_extent.nc',
-                                  'flash_init.nc',
+                                  'flash_centroid.nc',
                                   # 'source.nc',
                                   'footprint.nc',
                                   # 'flashsize_std.nc',
                                   'total_energy.nc',
                                   'group_extent.nc',
-                                  'group_init.nc',
+                                  'group_centroid.nc',
                                   'group_area.nc',
                                   'flash_area_min.nc')
+                                  'group_centroid.nc',
+                                  'group_area.nc',)
         self.outfile_postfixes_3d = None
 
         self.field_names = ('flash_extent_density',
@@ -323,7 +325,7 @@ class GLMGridder(FlashGridder):
                        )
 
         self.field_descriptions = ('Flash extent density',
-                            'Flash initiation density',
+                            'Flash centroid density',
                             # 'Event density',
                             'Average flash area',
                             # 'Standard deviation of flash area',
@@ -351,7 +353,7 @@ class GLMGridder(FlashGridder):
             # density_label,
             "km^2 per flash",
             # "km^2",
-            "J per flash",
+            "nJ",
             density_label,
             density_label,
             "km^2 per group",
@@ -595,6 +597,18 @@ class GLMlutGridder(GLMGridder):
 
         self.divide_grids[2]=0
         self.divide_grids[6]=4
+        
+    def write_grids(self, outpath = '', output_writer = None, 
+                    output_writer_3d = None,
+                    output_filename_prefix = None, output_kwargs={}):
+
+        pad = output_kwargs.pop('pad', None)
+        scale_and_offset = output_kwargs.pop('scale_and_offset', True)
+
+        from glmtools.io.imagery import write_goes_imagery
+        all_outfiles = write_goes_imagery(self, outpath=outpath, pad=pad,
+            scale_and_offset=scale_and_offset)
+        return all_outfiles
 
 
 def subdivide_bnd(bnd, delta, s=8):
@@ -710,12 +724,9 @@ class GridOutputPreprocess(object):
         self.pads = pads
         self.outargs=[]
         self.outkwargs=[]
-    def capture_write_call(self, *args, **kwargs):
-        # Use the padding information to trim up the grids
-        log.info("Trimming grids")
+
+    def get_pad_slices(self):
         n_x_pad, n_y_pad, x_pad, y_pad = self.pads
-        x_coord, y_coord = args[3], args[4]
-        grid = args[9]
         if n_x_pad == 0:
             x_slice = slice(None, None)
         else:
@@ -724,11 +735,21 @@ class GridOutputPreprocess(object):
             y_slice = slice(None, None)
         else:
             y_slice = slice(n_y_pad, -n_y_pad)
+        return x_slice, y_slice
+
+    def capture_write_call(self, *args, **kwargs):
+        # Use the padding information to trim up the grids
+        log.info("Trimming grids")
+        x_coord, y_coord = args[3], args[4]
+        grid = args[9]
+        x_slice, y_slice = self.get_pad_slices()
+        
         args = (*args[:3], x_coord[x_slice], y_coord[y_slice], *args[5:9],
                 grid[x_slice, y_slice], *args[10:])
 
         self.outargs.append(args)
         self.outkwargs.append(kwargs)
+
     def write_all(self):
         outfiles = []
         if self.writer:
@@ -838,7 +859,7 @@ def proc_each_grid(subgrid, start_time=None, end_time=None, GLM_filenames=None):
     ellipse_rev = process_flash_kwargs_ij.pop('ellipse_rev')
 
     # Eventually, we want to trim off n_x/y_pad from each side of the grid
-    n_x_pad, n_y_pad, x_pad, y_pad = pads
+    # n_x_pad, n_y_pad, x_pad, y_pad = pads
 
     log.info("out kwargs are", out_kwargs_ij)
 
@@ -856,8 +877,8 @@ def proc_each_grid(subgrid, start_time=None, end_time=None, GLM_filenames=None):
         # with open('/data/LCFA-production/L1b/mesh_subset.pickle', 'wb') as f:
             # pickle.dump(mesh, f)
         process_flash_kwargs_ij['clip_events'] = mesh
-        log.debug(("XEDGE", subgridij, xedge))
-        log.debug(("YEDGE", subgridij, yedge))
+        log.debug(("XEDGE", subgridij, xedge.min(), xedge.max(), xedge.shape))
+        log.debug(("YEDGE", subgridij, yedge.min(), yedge.max(), yedge.shape))
     for filename in GLM_filenames:
         # Could create a cache of GLM objects by filename here.
         log.info("Processing {0}".format(filename))
@@ -880,9 +901,24 @@ def proc_each_grid(subgrid, start_time=None, end_time=None, GLM_filenames=None):
     log.info("Done processing all files, preparing to write")
 
     preprocess_out = out_kwargs_ij.pop('preprocess_out', None)
-    if preprocess_out:
+    if preprocess_out: # in out_kwargs_ij:
+        if 'output_kwargs' not in out_kwargs_ij:
+            out_kwargs_ij['output_kwargs'] = {}
+        # Used by GLMlutGridder.write_grids, but not the others.
+        out_kwargs_ij['output_kwargs']['pad'] = preprocess_out.get_pad_slices()
+
         output = gridder.write_grids(**out_kwargs_ij)
-        log.info("Done with output preprocessing, doing final write")
+        
+        # Two things can happen here. If the lmatools CF NetCDF writer is used
+        # (as it would be when using GLMGridder)
+        # then write_all() is the step that actually does the writing after the
+        # lmatools.FlashGridder.write_grids call is intercepted by the output
+        # preprocessor. The GLMlutGridder, uses the pad slices kwarg
+        # and skips the preprocessor, and just writes directly. write_all() is 
+        # does nothing in the GLMlutGridder case. It would be better
+        # to resolve this inconsistency with a rearchitecture of how the
+        # subgrids are handled - avoiding the hacky output preprocessor in
+        # all cases.
         outfilenames = preprocess_out.write_all()
     else:
         outfilenames = gridder.write_grids(**out_kwargs_ij)

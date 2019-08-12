@@ -79,6 +79,10 @@ def create_parser():
                         help='Lightning ellipse revision. -1 (default)=infer'
                              ' from date in each GLM file, 0=value at launch,'
                              ' 1=late 2018 revision')
+    parser.add_argument('--float_output', dest='output_scale_and_offset',
+                        default=True,
+                        action='store_false', 
+                        help='write all output variables as floating point')
     parser.add_argument('--lma', dest='is_lma', 
                         action='store_true', 
                         help='grid LMA h5 files instead of GLM data')
@@ -224,8 +228,14 @@ def grid_setup(args):
                 "goes_position and dx. For goes_sector='meso', also specify "
                 "ctr_lon and ctr_lat. Without goes_sector, also include width "
                 "and height.")
-        x_bnd = (np.arange(nx, dtype='float') - nx/2.0)*dx + x_ctr + 0.5*dx
-        y_bnd = (np.arange(ny, dtype='float') - ny/2.0)*dy + y_ctr + 0.5*dy
+        # Need to use +1 here to convert to xedge, yedge expected by gridder
+        # instead of the pixel centroids that will result in the final image
+        nx += 1
+        ny += 1
+        x_bnd = (np.arange(nx, dtype='float') - (nx)/2.0)*dx + x_ctr + 0.5*dx
+        y_bnd = (np.arange(ny, dtype='float') - (ny)/2.0)*dy + y_ctr + 0.5*dy
+        log.debug(("initial x,y_ctr", x_ctr, y_ctr))
+        log.debug(("initial x,y_bnd", x_bnd.shape, y_bnd.shape))
         x_bnd = np.asarray([x_bnd.min(), x_bnd.max()])
         y_bnd = np.asarray([y_bnd.min(), y_bnd.max()])
         
@@ -271,6 +281,7 @@ def grid_setup(args):
             min_points_per_flash = min_events,
             output_writer = output_writer, subdivide=args.subdivide_grid,
             output_filename_prefix=output_filename_prefix,
+            output_kwargs={'scale_and_offset':args.output_scale_and_offset},
             spatial_scale_factor=1.0)
 
     if args.fixed_grid:

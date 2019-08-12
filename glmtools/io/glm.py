@@ -151,7 +151,7 @@ def event_areas(flash_data):
 
 class GLMDataset(OneToManyTraversal):
     def __init__(self, filename, calculate_parent_child=True, ellipse_rev=-1,
-                 check_area_units=True):
+                 check_area_units=True, change_energy_units=True):
         """ filename is any data source which works with xarray.open_dataset
 
             By default, helpful additional parent-child data are calculated,
@@ -175,6 +175,8 @@ class GLMDataset(OneToManyTraversal):
      
             check_area_units: If True (default) check the units on flash
                 and group area and convert to km^2 if in m^2.
+            change_energy_units: If True (default) change the units of flash,
+                group, and event energy to nJ.
         """
         dataset = xr.open_dataset(filename)
         self._filename = filename
@@ -202,6 +204,8 @@ class GLMDataset(OneToManyTraversal):
             
         if check_area_units:
             did_fix = self._check_area_units()
+        if change_energy_units:
+            did_fix = self._change_energy_units()
 
     def __init_parent_child_data(self):
         """ Calculate implied parameters that are useful for analyses
@@ -235,6 +239,34 @@ class GLMDataset(OneToManyTraversal):
         flash_child_event_count = xr.DataArray(count,
                                                dims=[self.fl_dim,])
         self.dataset['flash_child_event_count'] = flash_child_event_count
+    
+    def _change_energy_units(self):
+        """ Change the flash energy units to nJ.
+        Doesn't change the scale/offset, so the discretization of values
+        if this L2 dataset were to be written to disk. glmtools does not
+        do this, but it might be noticed if someone tried to!
+        """
+        changed_flash_energy, changed_group_energy, changed_event_energy = (
+            False, False, False)
+        if self.dataset.flash_energy.units == 'J':
+            self.dataset['flash_energy'] = self.dataset['flash_energy']*1.0e9
+            self.dataset.flash_energy.attrs['units'] = 'nJ'
+            changed_flash_energy = True
+        else:
+            raise ValueError("Flash energy units have changed from PUG v.2.0")
+        if self.dataset.group_energy.units == 'J':
+            self.dataset['group_energy'] = self.dataset['group_energy']*1.0e9
+            self.dataset.group_energy.attrs['units'] = 'nJ'
+            changed_group_energy = True
+        else:
+            raise ValueError("Group energy units have changed from PUG v.2.0")
+        if self.dataset.event_energy.units == 'J':
+            self.dataset['event_energy'] = self.dataset['event_energy']*1.0e9
+            self.dataset.event_energy.attrs['units'] = 'nJ'
+            changed_event_energy = True
+        else:
+            raise ValueError("Event energy units have changed from PUG v.2.0")
+        return changed_flash_energy, changed_group_energy, changed_event_energy
 
     def _check_area_units(self):
         fixed_flash_area, fixed_group_area = False, False
