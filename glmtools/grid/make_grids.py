@@ -308,8 +308,6 @@ class GLMGridder(FlashGridder):
                                   'group_centroid.nc',
                                   'group_area.nc',
                                   'flash_area_min.nc')
-                                  'group_centroid.nc',
-                                  'group_area.nc',)
         self.outfile_postfixes_3d = None
 
         self.field_names = ('flash_extent_density',
