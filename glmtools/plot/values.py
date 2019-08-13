@@ -51,3 +51,10 @@ display_params['average_group_area'] = {
     'file_tag':'group_area',
     'format_string':'{0:3.0f}'
 }
+
+display_params['minimum_flash_area'] = {
+    'product_label':"GOES-16 GLM Minimum Flash Area (km$^2$)",
+    'glm_norm':LogNorm(vmin=50, vmax=.5e4),
+    'file_tag':'flash_area_min',
+    'format_string':'{0:3.0f}'
+}
