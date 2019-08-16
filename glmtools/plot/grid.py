@@ -67,11 +67,20 @@ def plot_glm_grid(fig, glm_grids, tidx, fields, subplots=(2,3),
         ax.add_feature(state_boundaries, edgecolor=map_color, linewidth=0.5)
         ax.add_feature(country_boundaries, edgecolor=map_color, linewidth=1.0)
         
-        glm = glm_grids[f].sel(time=tidx).data
+        glm_sel = glm_grids[f].sel(time=tidx)
+        if hasattr(glm_sel, 'compute'):
+            # glm is a dask array, and needs to be computed before using some of the
+            # format string operations, below.
+            glm = glm_sel.compute().data.copy()
+            # when doing the np.isnan check below, using dask givs a
+            # weird array is read-only error without the "copy"
+            glm = glm.copy()
+        else:
+            glm = glm_sel.data
+        glm[np.isnan(glm)] = 0
         #     Use a masked array instead of messing with colormap to get transparency
         #     glm = np.ma.array(glm, mask=(np.isnan(glm)))
         #     glm_alpha = .5 + glm_norm(glm)*0.5
-        glm[np.isnan(glm)] = 0
         glm_img = ax.imshow(glm, extent=(x.min(), x.max(), 
                                y.min(), y.max()), origin='upper',
     #                            transform = ccrs.PlateCarree(),
