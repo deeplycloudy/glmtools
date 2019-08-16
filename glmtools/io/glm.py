@@ -478,6 +478,8 @@ def get_lutevents(dataset, scale_factor=28e-6, event_dim='number_of_events',
     xy_id = discretize_2d_location(event_x, event_y, scale_factor, x_range, y_range)
     dataset['event_parent_lutevent_id'] = xr.DataArray(xy_id, dims=[event_dim,])
     eventlut_groups = dataset.groupby('event_parent_lutevent_id')
+    flash_id_groupby = dataset.groupby('flash_id')
+    group_id_groupby = dataset.groupby('group_id')
     n_lutevents = len(eventlut_groups.groups)
 
     # Create a new dimension for the reduced set of events, with their
@@ -498,40 +500,59 @@ def get_lutevents(dataset, scale_factor=28e-6, event_dim='number_of_events',
                       ('lutevent_time_offset', '<M8[ns]'),
                       ('lutevent_min_flash_area', 'f8')
                       ]
-    def event_lut_iter(event_lut_groupby, flash_groupby, group_groupby):
-        flash_groups = flash_groupby.groups
-        group_groups = group_groupby.groups
-        for xy_id, evids in event_lut_groupby.groups.items():
-            flash_ids = np.unique(ev_flash_id[evids])
-            group_ids = np.unique(ev_group_id[evids])
-            flash_count, group_count = len(flash_ids), len(group_ids)
-            total_flash_area = sum((flash_area[flash_groups[fid]].sum()
-                for fid in flash_ids))
-            total_group_area = sum((group_area[group_groups[gid]].sum()
-                for gid in group_ids))
-            min_flash_area = min((flash_area[flash_groups[fid]].min()
-                for fid in flash_ids))
-            yield (xy_id,
-                   event_x[evids].mean(),
-                   event_y[evids].mean(),
-                   event_energy[evids].sum(),
-                   len(evids),
-                   flash_count,
-                   group_count,
-                   total_flash_area,
-                   total_group_area,
-                   product_time,
-                   min_flash_area
-                   )
 
-    lut_iter = event_lut_iter(eventlut_groups,
-                              dataset.groupby('flash_id'),
-                              dataset.groupby('group_id'))
+    lut_iter = event_lut_iter(eventlut_groups, flash_id_groupby, group_id_groupby,
+                   event_x, event_y, event_energy, product_time,
+                   ev_flash_id, ev_group_id, flash_area, group_area)
     event_lut = np.fromiter(lut_iter, dtype=eventlut_dtype, count=n_lutevents)
     lutevents = xr.Dataset.from_dataframe(
                     pd.DataFrame(event_lut).set_index('lutevent_id'))
     dataset.update(lutevents)
     return dataset
+
+
+def event_lut_iter(event_lut_groupby, flash_groupby, group_groupby,
+                   event_x, event_y, event_energy, product_time,
+                   ev_flash_id, ev_group_id, flash_area, group_area):
+    flash_groups = flash_groupby.groups
+    group_groups = group_groupby.groups
+    total_abs_area_delta = 0.0
+    total_area = 0.0
+    for xy_id, evids in event_lut_groupby.groups.items():
+        flash_ids = np.unique(ev_flash_id[evids])
+        group_ids = np.unique(ev_group_id[evids])
+        flash_count, group_count = len(flash_ids), len(group_ids)
+        # old_flash_area = sum((flash_area[flash_groups[fid]].sum()
+        #     for fid in flash_ids))
+        replicated_flashes = list(itertools.chain.from_iterable(
+            flash_groups[fid] for fid in flash_ids))
+        total_flash_area = flash_area[replicated_flashes].sum()
+        # total_abs_area_delta += np.abs(total_flash_area - old_flash_area)
+        # total_area += total_flash_area
+        # print(total_abs_area_delta, total_area)
+        # old_group_area = sum((group_area[group_groups[gid]].sum()
+        #     for gid in group_ids))
+        replicated_groups = list(itertools.chain.from_iterable(
+            group_groups[gid] for gid in group_ids))
+        total_group_area = group_area[replicated_groups].sum()
+        # total_abs_area_delta += np.abs(total_group_area - old_group_area)
+        # total_area += total_group_area
+        # print(total_abs_area_delta, total_area)
+        min_flash_area = min((flash_area[flash_groups[fid]].min()
+            for fid in flash_ids))
+        yield (xy_id,
+               event_x[evids].mean(),
+               event_y[evids].mean(),
+               event_energy[evids].sum(),
+               len(evids),
+               flash_count,
+               group_count,
+               total_flash_area,
+               total_group_area,
+               product_time,
+               min_flash_area
+               )
+
 
 def discretize_2d_location(x, y, scale, x_range, y_range, int_type='uint64'):
     """ Calculate a unique location ID for a 2D position given some
