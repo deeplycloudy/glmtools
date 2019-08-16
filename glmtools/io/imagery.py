@@ -529,20 +529,105 @@ def write_goes_imagery(gridder, outpath='.', pad=None, scale_and_offset=True):
         all_outfiles.append(outfile)
     return all_outfiles
 
-def open_glm_time_series(filenames):
+
+def aggregate(glm, minutes, start_end=None):
+    """ Given a multi-minute glm imagery dataset (such as that returned by
+        glmtools.io.imagery.open_glm_time_series) and an integer number of minutes,
+        recalculate average and minimum flash area for that interval and sum all other
+        fields.
+    
+        start_end: datetime objects giving the start and end edges of the interval to
+            be aggregated. This allows for a day-long dataset to be aggregated over an hour
+            of interest, for example. If not provided, the start of the glm dataset plus
+            *minutes* after the end of the glm dataset will be used.
+    """
+    dt_1min = timedelta(seconds=60)
+    dt = dt_1min*minutes
+    
+    if start_end is not None:
+        start = start_end[0]
+        end = start_end[1]
+    else:
+        start = pd.Timestamp(glm['time'].min().data).to_pydatetime()
+        end = pd.Timestamp(glm['time'].max().data).to_pydatetime() + dt
+        # dt_np = (end - start).data
+        # duration = pd.to_timedelta(dt_np).to_pytimedelta()
+    duration = end - start
+    
+    sum_data = glm[['flash_extent_density', 'flash_centroid_density',
+                    'total_energy',
+                    'group_extent_density', 'group_centroid_density', ]]
+                    
+    # goes_imager_projection is a dummy int variable, and all we care about
+    # is the attributes.
+    min_vars = ['minimum_flash_area', 'goes_imager_projection',
+                    'nominal_satellite_subpoint_lat', 'nominal_satellite_subpoint_lon']
+    min_data = glm[min_vars]
+    
+    
+
+    sum_data['total_flash_area'] = glm.average_flash_area*glm.flash_extent_density
+    sum_data['total_group_area'] = glm.average_flash_area*glm.flash_extent_density
+
+    t_bins = [start + dt*i for i in range(int(duration/dt)+1)]
+    t_groups_sum = sum_data.groupby_bins('time', bins=t_bins)
+    t_groups_min = min_data.groupby_bins('time', bins=t_bins)
+
+    # Take the minimum of anything along the minimum dimension
+    aggregated_min = t_groups_min.min(dim='time', keep_attrs=True)    
+    
+    # Naively sum all variables … so average areas are now ill defined. Recalculate
+    aggregated = t_groups_sum.sum(dim='time', keep_attrs=True)
+    aggregated['average_flash_area'] = (aggregated.total_flash_area
+                                        / aggregated.flash_extent_density)
+    aggregated['average_group_area'] = (aggregated.total_group_area
+                                        / aggregated.group_extent_density)
+    for var in min_vars:
+        aggregated[var] = aggregated_min[var]
+    
+    # direct copy of other useful attributes. This could be handled better, since it brings 
+    # along the original time dimension, but the projection is a static value and is safe
+    # to move over. We skip 'DQF' since it's empty and not clear what summing it would mean.
+    # Someone can make that decision later when DQF is populated.
+    # for v in ['goes_imager_projection']:
+        # aggregated[v] = glm[v]
+        
+    # time_bins is made up of Interval objects with left and right edges
+    aggregated.attrs['time_coverage_start'] = min(
+        [v.left for v in aggregated.time_bins.values]).isoformat()
+    aggregated.attrs['time_coverage_end'] = max(
+        [v.right for v in aggregated.time_bins.values]).isoformat()
+    
+    return aggregated
+
+
+
+def gen_file_times(filenames, time_attr='time_coverage_start'):
+    for s in filenames:
+        with xr.open_dataset(s, autoclose=True) as d:
+            # strip off timezone information so that xarray
+            # auto-converts to datetime64 instead of pandas.Timestamp objects
+            yield pd.Timestamp(d.attrs[time_attr]).tz_localize(None)
+
+
+def open_glm_time_series(filenames, chunks=None):
     """ Convenience function for combining individual 1-min GLM gridded imagery
     files into a single xarray.Dataset with a time dimension.
     
     Creates an index on the time dimension.
     
-    Does not adjust time_coverage_start and time_coverage_end metadata
-    to be accurate.
+    Adjusts the time_coverage_start and time_coverage_end metadata.
     """
     # Need to fix time_coverage_start and _end in concat dataset
-    all_xr = [xr.open_dataset(s) for s in filenames]
-    starts = [pd.to_datetime(d.time_coverage_start) for d in all_xr]
-    d = xr.concat(all_xr, dim='time')
+    starts = [t for t in gen_file_times(filenames)]
+    ends = [t for t in gen_file_times(filenames, time_attr='time_coverage_end')]
+    
+    d = xr.open_mfdataset(filenames, concat_dim='time', chunks=chunks, autoclose=True)
     d['time'] = starts
     d = d.set_index({'time':'time'})
     d = d.set_coords('time')
+    
+    d.attrs['time_coverage_start'] = pd.Timestamp(min(starts)).isoformat()
+    d.attrs['time_coverage_end'] = pd.Timestamp(max(ends)).isoformat()
+
     return d
