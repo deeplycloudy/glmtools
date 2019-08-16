@@ -496,7 +496,8 @@ def write_goes_imagery(gridder, outpath='.', pad=None, scale_and_offset=True):
             if i in self.divide_grids:
                 denom = self.outgrids[self.divide_grids[i]][x_slice,y_slice,ti]
                 zeros = (denom == 0) | (grid == 0)
-                grid = grid/denom
+                nonzeros = ~zeros
+                grid[nonzeros] = grid[nonzeros]/denom[nonzeros]
                 grid[zeros] = 0 # avoid nans
             image_at_time = np.flipud(grid.T)
 
