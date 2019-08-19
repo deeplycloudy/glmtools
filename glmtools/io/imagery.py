@@ -540,6 +540,12 @@ def aggregate(glm, minutes, start_end=None):
             be aggregated. This allows for a day-long dataset to be aggregated over an hour
             of interest, for example. If not provided, the start of the glm dataset plus
             *minutes* after the end of the glm dataset will be used.
+    
+        To restore the original time coordinate name, choose the left, mid, or right
+        endpoint of the time_bins coordinate produced by the aggregation step.
+        >>> agglm = aggregate(glm, 5)
+        >>> agglm['time_bins'] = [v.left for v in agglm.time_bins.values]
+        >>> glm_agg = agglm.rename({'time_bins':'time'})
     """
     dt_1min = timedelta(seconds=60)
     dt = dt_1min*minutes
@@ -554,14 +560,17 @@ def aggregate(glm, minutes, start_end=None):
         # duration = pd.to_timedelta(dt_np).to_pytimedelta()
     duration = end - start
     
-    sum_data = glm[['flash_extent_density', 'flash_centroid_density',
-                    'total_energy',
-                    'group_extent_density', 'group_centroid_density', ]]
+    sum_vars = ['flash_extent_density', 'flash_centroid_density',
+                'total_energy',
+                'group_extent_density', 'group_centroid_density', ]
+    sum_vars = [sv for sv in sum_vars if sv in glm]
+    sum_data = glm[sum_vars]
                     
     # goes_imager_projection is a dummy int variable, and all we care about
     # is the attributes.
     min_vars = ['minimum_flash_area', 'goes_imager_projection',
                     'nominal_satellite_subpoint_lat', 'nominal_satellite_subpoint_lon']
+    min_vars = [mv for mv in min_vars if mv in glm]
     min_data = glm[min_vars]
     
     
