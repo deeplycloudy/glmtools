@@ -104,9 +104,11 @@ def get_goes_imager_subpoint_vars(nadir_lon):
     sublon_enc = {'_FillValue':-999.0}
             
     sublat = xr.DataArray(0.0, name='nominal_satellite_subpoint_lat',
-                          attrs=sublat_meta, encoding=sublat_enc)
+                          attrs=sublat_meta)
+    sublat.encoding = sublat_enc
     sublon = xr.DataArray(nadir_lon, name='nominal_satellite_subpoint_lon',
-                          attrs=sublon_meta, encoding=sublon_enc)
+                          attrs=sublon_meta)
+    sublon.encoding = sublon_enc
     return sublon, sublat
 
 def get_goes_imager_proj(nadir_lon):
@@ -127,8 +129,8 @@ def get_goes_imager_proj(nadir_lon):
     encoding = {}
     encoding['dtype'] = 'i4'
     
-    var = xr.DataArray(-2147483647, attrs=meta, name='goes_imager_projection',
-                       encoding=encoding)
+    var = xr.DataArray(-2147483647, attrs=meta, name='goes_imager_projection')
+    var.encoding=encoding
     return var
 
 def get_goes_imager_all_valid_dqf(dims, n):
@@ -155,12 +157,12 @@ def get_goes_imager_all_valid_dqf(dims, n):
     enc['dtype'] = 'i1'
     enc['zlib'] = True # compress the field
     
-    dqf_var = xr.DataArray(dqf, dims=dims, attrs=meta, encoding=enc, name="DQF")
-    
+    dqf_var = xr.DataArray(dqf, dims=dims, attrs=meta, name="DQF")
+    dqf_var.encoding = enc
     return dqf_var
     
 def get_goes_imager_fixedgrid_coords(x, y, resolution='2km at nadir',
-        scene_id='FULL'):
+        scene_id='FULL', fill=-999.0):
     """ Create variables with metadata for fixed grid coordinates as defined
     for the GOES-R series of spacecraft.
 
@@ -181,9 +183,11 @@ def get_goes_imager_fixedgrid_coords(x, y, resolution='2km at nadir',
     # Values from the GOES-R PUG. These are signed shorts (int16).
     two_km_enc = {
         'FULL':{'dtype':'int16', 'x':{'scale_factor': 0.000056,
-                                      'add_offset':-0.151844},
+                                      'add_offset':-0.151844,
+                                      '_FillValue':-999.0},
                                  'y':{'scale_factor':-0.000056,
-                                      'add_offset':0.151844},
+                                      'add_offset':0.151844,
+                                      '_FillValue':-999.0},
                },
     # The PUG has specific values for the CONUS sector, and
     # given the discretization of the coords to 2 km resolution, is it necessary
@@ -217,9 +221,11 @@ def get_goes_imager_fixedgrid_coords(x, y, resolution='2km at nadir',
     y_meta['units'] = "rad"
     
     x_coord = xr.DataArray(x, name='x', dims=('x',),
-                           attrs=x_meta, encoding=x_enc)
+                           attrs=x_meta)
+    x_coord.encoding = x_enc
     y_coord = xr.DataArray(y, name='y', dims=('y',),
-                           attrs=y_meta, encoding=y_enc)
+                           attrs=y_meta)
+    y_coord.encoding = y_enc
     return x_coord, y_coord
 
 
@@ -343,7 +349,8 @@ def glm_image_to_var(data, name, long_name, units, dims, fill=0.0,
     meta['units'] = units
     meta['grid_mapping'] = "goes_imager_projection"
     
-    d = xr.DataArray(data, attrs=meta, encoding=enc, dims=dims, name=name)
+    d = xr.DataArray(data, attrs=meta, dims=dims, name=name)
+    d.encoding = enc
     return d
 
 def new_goes_imagery_dataset(x, y, nadir_lon):
@@ -582,7 +589,9 @@ def aggregate(glm, minutes, start_end=None):
     t_groups_sum = sum_data.groupby_bins('time', bins=t_bins)
     t_groups_min = min_data.groupby_bins('time', bins=t_bins)
 
-    # Take the minimum of anything along the minimum dimension
+    # Take the minimum of anything along the minimum dimension. We need to account for
+    # zero values, however, so that we don't cancel out pixels where there is a flash in
+    # one minute but not the other. TODO TODO TODO
     aggregated_min = t_groups_min.min(dim='time', keep_attrs=True)    
     
     # Naively sum all variables … so average areas are now ill defined. Recalculate
@@ -613,7 +622,7 @@ def aggregate(glm, minutes, start_end=None):
 
 def gen_file_times(filenames, time_attr='time_coverage_start'):
     for s in filenames:
-        with xr.open_dataset(s, autoclose=True) as d:
+        with xr.open_dataset(s) as d:
             # strip off timezone information so that xarray
             # auto-converts to datetime64 instead of pandas.Timestamp objects
             yield pd.Timestamp(d.attrs[time_attr]).tz_localize(None)
@@ -625,13 +634,16 @@ def open_glm_time_series(filenames, chunks=None):
     
     Creates an index on the time dimension.
     
+    The time dimension will be in the order in which the files are listed
+    due to the behavior of combine='nested' in open_mfdataset.
+    
     Adjusts the time_coverage_start and time_coverage_end metadata.
     """
     # Need to fix time_coverage_start and _end in concat dataset
     starts = [t for t in gen_file_times(filenames)]
     ends = [t for t in gen_file_times(filenames, time_attr='time_coverage_end')]
     
-    d = xr.open_mfdataset(filenames, concat_dim='time', chunks=chunks, autoclose=True)
+    d = xr.open_mfdataset(filenames, concat_dim='time', chunks=chunks, combine='nested')
     d['time'] = starts
     d = d.set_index({'time':'time'})
     d = d.set_coords('time')
