@@ -817,13 +817,13 @@ def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
     this_proc_each_grid = partial(proc_each_grid, start_time=start_time,
         end_time=end_time, GLM_filenames=GLM_filenames)
 
-    if subdivide_grid > 1:
-        pool = ProcessPoolExecutor(max_workers=4)
-        with pool:
-            # Block until the pool completes (pool is a context manager)
-            outputs = pool.map(this_proc_each_grid, subgrids)
-    else:
-        outputs = list(map(this_proc_each_grid, subgrids))
+    # if subdivide_grid > 1:
+    #     pool = ProcessPoolExecutor(max_workers=4)
+    #     with pool:
+    #         # Block until the pool completes (pool is a context manager)
+    #         outputs = pool.map(this_proc_each_grid, subgrids)
+    # else:
+    outputs = list(map(this_proc_each_grid, subgrids))
     for op in outputs:
         log.debug(outputs)
 
@@ -849,7 +849,7 @@ def proc_each_grid(subgrid, start_time=None, end_time=None, GLM_filenames=None):
     GLM_filenames -- a list of GLM filenames to process
     """
 
-    subgridij, kwargsij, process_flash_kwargs_ij, out_kwargs_ij, pads = subgrid 
+    subgridij, kwargsij, process_flash_kwargs_ij, out_kwargs_ij, pads = subgrid
     ellipse_rev = process_flash_kwargs_ij.pop('ellipse_rev')
 
     # Eventually, we want to trim off n_x/y_pad from each side of the grid
