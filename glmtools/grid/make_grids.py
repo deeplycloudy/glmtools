@@ -849,7 +849,7 @@ def proc_each_grid(subgrid, start_time=None, end_time=None, GLM_filenames=None):
     GLM_filenames -- a list of GLM filenames to process
     """
 
-    subgridij, kwargsij, process_flash_kwargs_ij, out_kwargs_ij, pads = subgrid 
+    subgridij, kwargsij, process_flash_kwargs_ij, out_kwargs_ij, pads = subgrid
     ellipse_rev = process_flash_kwargs_ij.pop('ellipse_rev')
 
     # Eventually, we want to trim off n_x/y_pad from each side of the grid
