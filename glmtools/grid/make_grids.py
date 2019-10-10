@@ -817,13 +817,13 @@ def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
     this_proc_each_grid = partial(proc_each_grid, start_time=start_time,
         end_time=end_time, GLM_filenames=GLM_filenames)
 
-    if subdivide_grid > 1:
-        pool = ProcessPoolExecutor(max_workers=4)
-        with pool:
-            # Block until the pool completes (pool is a context manager)
-            outputs = pool.map(this_proc_each_grid, subgrids)
-    else:
-        outputs = list(map(this_proc_each_grid, subgrids))
+    # if subdivide_grid > 1:
+    #     pool = ProcessPoolExecutor(max_workers=4)
+    #     with pool:
+    #         # Block until the pool completes (pool is a context manager)
+    #         outputs = pool.map(this_proc_each_grid, subgrids)
+    # else:
+    outputs = list(map(this_proc_each_grid, subgrids))
     for op in outputs:
         log.debug(outputs)
 

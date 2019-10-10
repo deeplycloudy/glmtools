@@ -594,10 +594,10 @@ class QuadMeshPolySlicer(object):
         sub_poly_args = tuple(zip(poly_arr, areas, all_quads))
 
         # Use this version instead of the one below to serialize on the same process
-        # sub_polys = list(map(make_sub_polys, sub_poly_args))
+        sub_polys = list(map(make_sub_polys, sub_poly_args))
 
         # Use this version instead of the one above to parallelize on subprocesses.
-        sub_polys = list(run_pool_map(make_sub_polys, sub_poly_args))
+        # sub_polys = list(run_pool_map(make_sub_polys, sub_poly_args))
 
         # This is what run_pool_map does, but run_pool_map isolates local namespace
         # pool = ProcessPoolExecutor(max_workers=6)
