@@ -88,7 +88,10 @@ def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
     flash_chunks = []
     for ichunk, id_chunk in enumerate(np.array_split(flash_ids, n_chunks)):
         log.info("Grabbing chunk {0} of {2} for file {1}".format(ichunk+1, glm._filename, n_chunks))
-        flash_chunks.append(glm.get_flashes(id_chunk))
+        if (flash_data.number_of_flashes.shape[0] > 0):
+            flash_chunks.append(glm.get_flashes(id_chunk))
+        else:
+            log.info("Chunk {0} of {2} for file {1} has no flashes".format(ichunk+1, glm._filename, n_chunks))
 
     if clip_events:
         chunk_func = partial(fast_fixed_grid_read_chunk, target=target, base_date=base_date,
@@ -392,7 +395,7 @@ def read_flash_chunk(flash_data, glm=None, target=None, base_date=None, nadir_lo
             pt = flash_data.product_time.dt
             date = datetime(pt.year, pt.month, pt.day,
                             pt.hour, pt.minute, pt.second)
-            
+
             x_lut, y_lut, corner_lut = load_pixel_corner_lookup(corner_pickle)
             # Convert from microradians to radians
             x_lut = x_lut * 1.0e-6
@@ -830,17 +833,17 @@ def _fake_lma_events_from_split_glm_lutevents(split_events, basedate):
     xyidx = (split_events.split_event_mesh_y_idx * (xi_max+1) +
                 split_events.split_event_mesh_x_idx)
     split_events['xyidx'] = xyidx
-    
-    
+
+
     # Grab just the variables needed for the calculations.
     # Also convert to a dataframe to use the pandas groupby, which is
     # substantially faster than the xarray groupby, per
     # https://github.com/pydata/xarray/issues/659
-    mean_data_in = split_events[['split_event_x', 
+    mean_data_in = split_events[['split_event_x',
                                  'split_event_y',
                                  'xyidx'
                                ]].to_dataframe()
-    sum_data_in = split_events[['split_lutevent_energy', 
+    sum_data_in = split_events[['split_lutevent_energy',
                            'split_event_mesh_area_fraction',
                            'split_lutevent_count',
                            'split_lutevent_group_count',
@@ -856,7 +859,7 @@ def _fake_lma_events_from_split_glm_lutevents(split_events, basedate):
                                 'split_lutevent_min_flash_area',
                                 'xyidx'
                                 ]].to_dataframe()
-        
+
     min_data = min_data_in.groupby('xyidx').min()
     mean_data = mean_data_in.groupby('xyidx').mean()
     sum_data = sum_data_in.groupby('xyidx').sum()
@@ -893,7 +896,7 @@ def _fake_lma_from_glm_lutflashes(flash_data, basedate):
     if flash_np.shape[0] == 0:
         # no data, nothing to do
         return flash_np
-    
+
     flash_np['area'] = flash_data.flash_area.data
     flash_np['total_energy'] = flash_data.flash_energy.data
     flash_np['ctr_x'] = flash_data.flash_x.data
