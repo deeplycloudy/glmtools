@@ -88,7 +88,10 @@ def read_flashes(glm, target, base_date=None, lon_range=None, lat_range=None,
     flash_chunks = []
     for ichunk, id_chunk in enumerate(np.array_split(flash_ids, n_chunks)):
         log.info("Grabbing chunk {0} of {2} for file {1}".format(ichunk+1, glm._filename, n_chunks))
-        flash_chunks.append(glm.get_flashes(id_chunk))
+        if (flash_data.number_of_flashes.shape[0] > 0):
+            flash_chunks.append(glm.get_flashes(id_chunk))
+        else:
+            log.info("Chunk {0} of {2} for file {1} has no flashes".format(ichunk+1, glm._filename, n_chunks))
 
     if clip_events:
         chunk_func = partial(fast_fixed_grid_read_chunk, target=target, base_date=base_date,
@@ -402,7 +405,7 @@ def read_flash_chunk(flash_data, glm=None, target=None, base_date=None, nadir_lo
             pt = flash_data.product_time.dt
             date = datetime(pt.year, pt.month, pt.day,
                             pt.hour, pt.minute, pt.second)
-            
+
             x_lut, y_lut, corner_lut = load_pixel_corner_lookup(corner_pickle)
             # Convert from microradians to radians
             x_lut = x_lut * 1.0e-6

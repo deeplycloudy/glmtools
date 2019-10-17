@@ -47,7 +47,6 @@ log.addHandler(logging.NullHandler())
 import pickle
 import tables
 import numpy as np
-from sklearn.neighbors import KDTree
 from scipy.interpolate import LinearNDInterpolator, NearestNDInterpolator
 
 extrap_warning = 'pixel outside domain of known corner points; extrapolating'
@@ -196,6 +195,7 @@ def create_pixel_lookup(lons, lats, leaf_size=40):
     >>> loni, lati = lons[X[idx], Y[idx]], lats[X[idx], Y[idx]]
         
     """
+    from sklearn.neighbors import KDTree
     
     x = np.arange(lons.shape[0])
     y = np.arange(lons.shape[1])
