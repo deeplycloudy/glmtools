@@ -16,7 +16,6 @@ from glmtools.grid.clipping import QuadMeshPolySlicer, join_polys
 from glmtools.io.ccd import load_pixel_corner_lookup, quads_from_corner_lookup
 from lmatools.io.LMA_h5_file import LMAh5Collection
 from lmatools.lasso.cell_lasso_timeseries import TimeSeriesGenericFlashSubset
-from lmatools.lasso.energy_stats import TimeSeriesPolygonLassoFilter
 from lmatools.grid.fixed import get_GOESR_coordsys
 
 # from lmatools.io.LMA_h5_file import LMAh5Collection
@@ -1080,6 +1079,8 @@ class TimeSeriesGLMPolygonFlashSubset(TimeSeriesGLMFlashSubset):
 
         super(TimeSeriesGLMPolygonFlashSubset, self).__init__(*args, **kwargs)
 
+        # Put a fence around possible lmatools imports (like matplotlib)
+        from lmatools.lasso.energy_stats import TimeSeriesPolygonLassoFilter
         # strictly speaking, we don't even need the time series part; that's been done
         # and we're just lassoin' the points.
         # But, this code is known to work, so we just reuse it here.
