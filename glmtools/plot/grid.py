@@ -31,13 +31,13 @@ def set_shared_geoaxes(fig):
 
 
 def plot_glm_grid(fig, glm_grids, tidx, fields, subplots=(2,3),
-             axes_facecolor = (0., 0., 0.), map_color = (.8, .8, .8)):    
+             axes_facecolor = (0., 0., 0.), map_color = (.8, .8, .8)):
     fig.clf()
     glmx = glm_grids.x.data[:]
     glmy = glm_grids.y.data[:]
     proj_var = glm_grids['goes_imager_projection']
     x = glmx * proj_var.perspective_point_height
-    y = glmy * proj_var.perspective_point_height    
+    y = glmy * proj_var.perspective_point_height
     glm_xlim = x.min(), x.max()
     glm_ylim = y.min(), y.max()
 
@@ -51,9 +51,9 @@ def plot_glm_grid(fig, glm_grids, tidx, fields, subplots=(2,3),
     proj = ccrs.Geostationary(central_longitude=proj_var.longitude_of_projection_origin,
                               satellite_height=proj_var.perspective_point_height, globe=globe)
     cbars=[]
-    
+
     for fi, f in enumerate(fields):
-            
+
         glm_norm = display_params[f]['glm_norm']
         product_label = display_params[f]['product_label']
         file_tag = display_params[f]['file_tag']
@@ -66,7 +66,7 @@ def plot_glm_grid(fig, glm_grids, tidx, fields, subplots=(2,3),
         ax.coastlines('10m', color=map_color)
         ax.add_feature(state_boundaries, edgecolor=map_color, linewidth=0.5)
         ax.add_feature(country_boundaries, edgecolor=map_color, linewidth=1.0)
-        
+
         glm_sel = glm_grids[f].sel(time=tidx)
         if hasattr(glm_sel, 'compute'):
             # glm is a dask array, and needs to be computed before using some of the
@@ -81,7 +81,7 @@ def plot_glm_grid(fig, glm_grids, tidx, fields, subplots=(2,3),
         #     Use a masked array instead of messing with colormap to get transparency
         #     glm = np.ma.array(glm, mask=(np.isnan(glm)))
         #     glm_alpha = .5 + glm_norm(glm)*0.5
-        glm_img = ax.imshow(glm, extent=(x.min(), x.max(), 
+        glm_img = ax.imshow(glm, extent=(x.min(), x.max(),
                                y.min(), y.max()), origin='upper',
     #                            transform = ccrs.PlateCarree(),
                                cmap=glm_cmap, interpolation='nearest',
@@ -93,13 +93,13 @@ def plot_glm_grid(fig, glm_grids, tidx, fields, subplots=(2,3),
 
     # Set a lat/lon box directly
 #         ax.set_extent([-103, -99.5, 32.0, 38.0])
-    
+
         # limits = ax.axis()
         limits = [0.,1.,0.,1.]
         glm_field_max = max_format.format(glm.max())
-        ax.text(limits[0]+.02*(limits[1]-limits[0]), limits[2]+.02*(limits[3]-limits[2]), 
+        ax.text(limits[0]+.02*(limits[1]-limits[0]), limits[2]+.02*(limits[3]-limits[2]),
             tidx.isoformat().replace('T', ' ')+' UTC'+
-            label_string.format(glm_field_max, product_label), 
+            label_string.format(glm_field_max, product_label),
             transform = ax.transAxes, fontsize=10,
             color=map_color)
         ax.text(limits[0]+.02*(limits[1]-limits[0]),
@@ -123,7 +123,7 @@ def plot_glm_grid(fig, glm_grids, tidx, fields, subplots=(2,3),
         top_edge = [posn.x0, posn.y0+posn.height*(1.0-height_scale),
                     posn.width, posn.height*height_scale]
         cbar_ax = fig.add_axes(top_edge)
-        cbar = plt.colorbar(glm_img, orientation='horizontal', cax=cbar_ax, #aspect=50, 
+        cbar = plt.colorbar(glm_img, orientation='horizontal', cax=cbar_ax, #aspect=50,
                     format=LogFormatter(base=2), ticks=LogLocator(base=2))
         cbar.outline.set_edgecolor(axes_facecolor)
         ax.outline_patch.set_edgecolor(axes_facecolor)
@@ -132,5 +132,5 @@ def plot_glm_grid(fig, glm_grids, tidx, fields, subplots=(2,3),
         cbar_obj.append(cbar)
     mapax = set_shared_geoaxes(fig)
     return mapax, cbar_obj
-    
+
 
