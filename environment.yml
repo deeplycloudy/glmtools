@@ -6,13 +6,14 @@ dependencies:
 - hdf5
 - netcdf4
 - numpy
-- pytables
 - pandas
-- xarray
-- scikit-learn
-- scipy
-- ipython
-- matplotlib
+- pip
+- pyclipper
 - pyproj
 - python=3.6
+- scipy
 - six
+- xarray
+- pip:
+  - git+https://github.com/deeplycloudy/lmatools.git@minvaluegrids
+  - git+https://github.com/deeplycloudy/stormdrain.git
