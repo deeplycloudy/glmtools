@@ -151,7 +151,8 @@ def event_areas(flash_data):
 
 class GLMDataset(OneToManyTraversal):
     def __init__(self, filename, calculate_parent_child=True, ellipse_rev=-1,
-                 check_area_units=True, change_energy_units=True):
+                 check_area_units=True, change_energy_units=True,
+                 fix_bad_DO07_times=True):
         """ filename is any data source which works with xarray.open_dataset
 
             By default, helpful additional parent-child data are calculated,
@@ -172,11 +173,14 @@ class GLMDataset(OneToManyTraversal):
                 -1 (default) : infer ellipsoid from GLM filename
                 0 : version at launch
                 1 : first revision, lowering equatorial height to 14 km.
-     
+
             check_area_units: If True (default) check the units on flash
                 and group area and convert to km^2 if in m^2.
             change_energy_units: If True (default) change the units of flash,
                 group, and event energy to nJ.
+            fix_bad_DO07_times: If True (default), correct for the missing
+                _Unsigned attribute for the ~month in Oct-Nov 2018 when the
+                problem was present.
         """
         dataset = xr.open_dataset(filename)
         self._filename = filename
@@ -201,7 +205,9 @@ class GLMDataset(OneToManyTraversal):
             # self.__init_event_lut()
         else:
             self.dataset = dataset
-            
+
+        if fix_bad_DO07_times:
+            did_fix = self._check_and_fix_missing_unsigned_time(filename)
         if check_area_units:
             did_fix = self._check_area_units()
         if change_energy_units:
@@ -239,7 +245,7 @@ class GLMDataset(OneToManyTraversal):
         flash_child_event_count = xr.DataArray(count,
                                                dims=[self.fl_dim,])
         self.dataset['flash_child_event_count'] = flash_child_event_count
-    
+
     def _change_energy_units(self):
         """ Change the flash energy units to nJ.
         Doesn't change the scale/offset, so the discretization of values
@@ -311,6 +317,50 @@ class GLMDataset(OneToManyTraversal):
         #     log.debug("{0}".format(self.get_flashes([bad_id])))
         return np.unique(flash_ids)
 
+    def _check_and_fix_missing_unsigned_time(self, filename):
+        """ Check for the missing _Unsigned attribute on files created as part of the
+        D0.07 build of the operational environment. Correct if present. The problem
+        was only present for less than a month, and this function does nothing if
+        the data file is outside that time range.
+
+        Modifies self.dataset to have the correct times.
+        """
+        vars_to_correct = ['event_time_offset','group_time_offset',
+                           'group_frame_time_offset',
+                           'flash_time_offset_of_first_event',
+                           'flash_time_offset_of_last_event',
+                           'flash_frame_time_offset_of_first_event',
+                           'flash_frame_time_offset_of_last_event']
+
+        start_g16_problem_date = np.datetime64('2018-10-15T00:00:00')
+        end_g16_problem_date = np.datetime64('2018-11-06T00:00:00')
+        prod_tmin, prod_tmax = self.dataset.product_time_bounds.data
+        in_time = (prod_tmin >= start_g16_problem_date) & (prod_tmax <= end_g16_problem_date)
+        # The date range is approximate, and corresponds to when D0.07 first was
+        # in production in the OE, and before the _Unsigned attribute was added to
+        # the production data files. We don't know the exact start time, but fortunately
+        # the group_frame_time_offset was also added to D0.07, so we look for that attribute
+        # within the date range. Later, adding the attribute to a file that already has it
+        # is no problem, so we don't worry about the last time on Nov 6 when the fix is needed.
+        if (in_time & hasattr(self.dataset,'group_frame_time_offset')):
+            unmod = xr.open_dataset(filename, mask_and_scale=False, decode_cf=False)
+            time_dataset = xr.Dataset()
+            for var in vars_to_correct:
+                # Add the _Unsigned attribute
+                da = getattr(unmod,var)
+                da.attrs['_Unsigned']='true'
+                time_dataset[var] = da
+
+            decoded = xr.decode_cf(time_dataset)
+
+            # Copy corrected time variables over to the new dataset
+            for var in vars_to_correct:
+                self.dataset[var] = decoded[var]
+            unmod.close()
+            return True
+        else:
+            return False
+
     @property
     def fov_bounds(self):
 #         lat_bnd = self.dataset.lat_field_of_view_bounds.data
@@ -365,7 +415,7 @@ class GLMDataset(OneToManyTraversal):
             good &= (flash_data.flash_child_group_count >= min_groups).data
 
         flash_ids = flash_data.flash_id[good].data
-        
+
         if check_event_xy:
             check_event_kw = {}
             if x_range is not None: check_event_kw['x_range'] = x_range
@@ -401,7 +451,7 @@ class GLMDataset(OneToManyTraversal):
                             pt.hour, pt.minute, pt.second)
             ellipse_rev = ltg_ellpse_rev(date)
         log.info("Using lightning ellipsoid rev {0}".format(ellipse_rev))
-            
+
         event_x, event_y = ltg_ellps_lon_lat_to_fixed_grid(
             self.dataset.event_lon.data, self.dataset.event_lat.data,
             nadir_lon, ellipse_rev)
