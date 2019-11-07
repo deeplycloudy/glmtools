@@ -182,7 +182,15 @@ class GLMDataset(OneToManyTraversal):
                 _Unsigned attribute for the ~month in Oct-Nov 2018 when the
                 problem was present.
         """
-        dataset = xr.open_dataset(filename)
+        self.entity_ids = ['flash_id', 'group_id', 'event_id']
+        self.parent_ids = ['group_parent_flash_id', 'event_parent_group_id']
+
+        if isinstance(filename, xr.Dataset):
+            dataset = filename
+            super().__init__(dataset,
+                             self.entity_ids, self.parent_ids)
+        else:
+            dataset = xr.open_dataset(filename)
         self._filename = filename
         self.ellipse_rev = ellipse_rev
 
@@ -192,9 +200,6 @@ class GLMDataset(OneToManyTraversal):
         self.gr_dim = 'number_of_groups'
         self.ev_dim = 'number_of_events'
         self.fl_dim = 'number_of_flashes'
-
-        self.entity_ids = ['flash_id', 'group_id', 'event_id']
-        self.parent_ids = ['group_parent_flash_id', 'event_parent_group_id']
 
         if calculate_parent_child:
             # sets self.dataset
