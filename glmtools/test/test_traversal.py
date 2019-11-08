@@ -15,6 +15,21 @@ def get_four_level_data_traversal():
     traversal = OneToManyTraversal(d, entity_vars, parent_vars)
     return d, traversal
     
+def get_four_level_empty_data_traversal():
+    d = get_four_level_data()
+    empty_all = {dim:slice(0,0) for dim in d.dims}
+    d = d[empty_all]
+
+    entity_vars = ('storm_id', 'flash_id', 'stroke_id', 'trig_id')
+    parent_vars = ('flash_parent_storm_id',
+                   'stroke_parent_flash_id',
+                   'trig_parent_stroke_id')
+    traversal = OneToManyTraversal(d, entity_vars, parent_vars)
+    return d, traversal
+
+def test_empty_traversal_init():
+    d, traversal = get_four_level_empty_data_traversal()
+
 def test_count_children():
     d, traversal = get_four_level_data_traversal()
     

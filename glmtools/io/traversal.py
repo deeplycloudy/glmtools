@@ -72,10 +72,18 @@ class OneToManyTraversal(object):
         self.child_to_parent = collections.OrderedDict()
         self.parent_to_child = collections.OrderedDict()
         for (entity_var, parent_var) in self._descend():
+            if dataset.dims[dataset[entity_var].dims[0]] == 0:
+                # No data, so groupby will fail in xarray > 0.13
+                entity_grouper = None
+            else:
             entity_grouper = dataset.groupby(entity_var)
             self.entity_groups[entity_var] = entity_grouper
             if parent_var is None:
                 parent_grouper = None
+            else:
+                if dataset.dims[dataset[parent_var].dims[0]] == 0:
+                    # No data, so groupby will fail in xarray > 0.13
+                    parent_grouper = None
             else:
                 parent_grouper = dataset.groupby(parent_var)
             self.parent_groups[parent_var] = parent_grouper
@@ -272,4 +280,3 @@ class OneToManyTraversal(object):
                 last_entity_ids = np.unique(dataset[p_var].data)
 
         return dataset
-        

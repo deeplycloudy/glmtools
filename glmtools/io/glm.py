@@ -207,24 +207,37 @@ class GLMDataset(OneToManyTraversal):
         """ Calculate implied parameters that are useful for analyses
             of GLM data.
         """
+        if ((self.dataset.dims['number_of_flashes'] == 0) |
+            (self.dataset.dims['number_of_groups'] == 0) |
+            (self.dataset.dims['number_of_events'] == 0)):
+            no_data = True
+            log.warning('File {0} has no data, skipping it'.format(
+                        self._filename))
+
+        else:
+            no_data = False
+
+        if no_data:
+            # At least one of the dimensiosn of the dataset is empty, so the
+            # the traversal of the flash/group/event hierarchy cannot take
+            #place. xarray's groupby raises a ValueError on empty DataArrays,
+            # and groupby is used in the traversal.
+            flash_ids = []
+        else:
         flash_ids = self.replicate_parent_ids('flash_id',
                                               'event_parent_group_id'
                                               )
         event_parent_flash_id = xr.DataArray(flash_ids, dims=[self.ev_dim,])
         self.dataset['event_parent_flash_id'] = event_parent_flash_id
 
-
+        if no_data:
+            flash_child_count = []
+            group_child_count = []
+            count = []
+        else:
         all_counts = self.count_children('flash_id', 'event_id')
         flash_child_count = all_counts[0]
-        flash_child_group_count = xr.DataArray(flash_child_count,
-                                               dims=[self.fl_dim,])
-        self.dataset['flash_child_group_count'] = flash_child_group_count
-
         group_child_count = all_counts[1]
-        group_child_event_count = xr.DataArray(group_child_count,
-                                               dims=[self.gr_dim,])
-        self.dataset['group_child_event_count'] = group_child_event_count
-
         # we can use event_parent_flash_id to get the flash_child_event_count
         # need a new groupby on event_parent_flash_id
         # then count number of flash_ids that match in the groupby
@@ -232,6 +245,13 @@ class GLMDataset(OneToManyTraversal):
         grouper = self.dataset.groupby('event_parent_flash_id').groups
         count = [len(grouper[eid]) if (eid in grouper) else 0
                  for eid in self.dataset['flash_id'].data]
+
+        flash_child_group_count = xr.DataArray(flash_child_count,
+                                               dims=[self.fl_dim,])
+        self.dataset['flash_child_group_count'] = flash_child_group_count
+        group_child_event_count = xr.DataArray(group_child_count,
+                                               dims=[self.gr_dim,])
+        self.dataset['group_child_event_count'] = group_child_event_count
         flash_child_event_count = xr.DataArray(count,
                                                dims=[self.fl_dim,])
         self.dataset['flash_child_event_count'] = flash_child_event_count
