@@ -172,7 +172,7 @@ class GLMDataset(OneToManyTraversal):
                 -1 (default) : infer ellipsoid from GLM filename
                 0 : version at launch
                 1 : first revision, lowering equatorial height to 14 km.
-     
+
             check_area_units: If True (default) check the units on flash
                 and group area and convert to km^2 if in m^2.
         """
@@ -199,7 +199,7 @@ class GLMDataset(OneToManyTraversal):
             # self.__init_event_lut()
         else:
             self.dataset = dataset
-            
+
         if check_area_units:
             did_fix = self._check_area_units()
 
@@ -224,9 +224,9 @@ class GLMDataset(OneToManyTraversal):
             # and groupby is used in the traversal.
             flash_ids = []
         else:
-        flash_ids = self.replicate_parent_ids('flash_id',
-                                              'event_parent_group_id'
-                                              )
+            flash_ids = self.replicate_parent_ids('flash_id',
+                                                  'event_parent_group_id'
+                                                  )
         event_parent_flash_id = xr.DataArray(flash_ids, dims=[self.ev_dim,])
         self.dataset['event_parent_flash_id'] = event_parent_flash_id
 
@@ -235,16 +235,16 @@ class GLMDataset(OneToManyTraversal):
             group_child_count = []
             count = []
         else:
-        all_counts = self.count_children('flash_id', 'event_id')
-        flash_child_count = all_counts[0]
-        group_child_count = all_counts[1]
-        # we can use event_parent_flash_id to get the flash_child_event_count
-        # need a new groupby on event_parent_flash_id
-        # then count number of flash_ids that match in the groupby
-        # probably would be a good idea to add this to the traversal class
-        grouper = self.dataset.groupby('event_parent_flash_id').groups
-        count = [len(grouper[eid]) if (eid in grouper) else 0
-                 for eid in self.dataset['flash_id'].data]
+            all_counts = self.count_children('flash_id', 'event_id')
+            flash_child_count = all_counts[0]
+            group_child_count = all_counts[1]
+            # we can use event_parent_flash_id to get the flash_child_event_count
+            # need a new groupby on event_parent_flash_id
+            # then count number of flash_ids that match in the groupby
+            # probably would be a good idea to add this to the traversal class
+            grouper = self.dataset.groupby('event_parent_flash_id').groups
+            count = [len(grouper[eid]) if (eid in grouper) else 0
+                     for eid in self.dataset['flash_id'].data]
 
         flash_child_group_count = xr.DataArray(flash_child_count,
                                                dims=[self.fl_dim,])
@@ -353,7 +353,7 @@ class GLMDataset(OneToManyTraversal):
             good &= (flash_data.flash_child_group_count >= min_groups).data
 
         flash_ids = flash_data.flash_id[good].data
-        
+
         if check_event_xy:
             check_event_kw = {}
             if x_range is not None: check_event_kw['x_range'] = x_range
@@ -389,7 +389,7 @@ class GLMDataset(OneToManyTraversal):
                             pt.hour, pt.minute, pt.second)
             ellipse_rev = ltg_ellpse_rev(date)
         log.info("Using lightning ellipsoid rev {0}".format(ellipse_rev))
-            
+
         event_x, event_y = ltg_ellps_lon_lat_to_fixed_grid(
             self.dataset.event_lon.data, self.dataset.event_lat.data,
             nadir_lon, ellipse_rev)
