@@ -493,8 +493,8 @@ def write_goes_imagery(gridder, outpath='.', pad=None, output_filename_prefix=No
                 "2km at nadir", "ABI Mode 3", "DE", "Postprocessed", "TTU"
                 )
         dataset = dataset.assign_attrs(**global_attrs)
-        #log.debug("*** Checking x coordinate attrs initial")
-        #log.debug(dataset.x.attrs)
+        # log.debug("*** Checking x coordinate attrs initial")
+        # log.debug(dataset.x.attrs)
                 
         #outfile = os.path.join(outpath, dataset.attrs['dataset_name'])
 
