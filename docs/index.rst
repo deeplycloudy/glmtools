@@ -43,7 +43,8 @@ to install that package from source. From some working directory (e.g.,
    cd glmtools
    git checkout unifiedgridfile
    conda env create -f environment.yml
-   source activate glmval
+   conda activate glmval
+   pip install -e .
 
 If you want to use the example notebooks also run
 "conda install -c conda-forge ipython matplotlib"
