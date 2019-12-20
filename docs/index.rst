@@ -33,10 +33,6 @@ Step by step instructions
 The instructions below assume the Anaconda Python distribution (``miniconda`` is
 fine), and the availability of the ``conda`` package manager.
 
-Until development on ``lmatools`` stabilizes, it is recommended
-to install that package from source. From some working directory (e.g.,
-``~/sources``):
-
 .. code-block:: bash
 
    git clone https://github.com/deeplycloudy/glmtools.git
@@ -60,7 +56,7 @@ If you are using the environment created by environment.yml, this environment wi
 
 .. code-block:: bash
 
-   source activate glmval
+   conda activate glmval
 
 
 Get some GLM data, and check it for sanity
