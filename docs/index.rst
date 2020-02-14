@@ -37,7 +37,7 @@ fine), and the availability of the ``conda`` package manager.
 
    git clone https://github.com/deeplycloudy/glmtools.git
    cd glmtools
-   git checkout unifiedgridfile
+   git checkout ugf-newgrid
    conda env create -f environment.yml
    conda activate glmval
    pip install -e .
