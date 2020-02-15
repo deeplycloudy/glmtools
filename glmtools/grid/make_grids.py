@@ -596,7 +596,7 @@ class GLMlutGridder(GLMGridder):
         self.divide_grids[2]=0
         self.divide_grids[6]=4
         
-    def write_grids(self, outpath = '', output_writer = None, 
+    def write_grids(self, outpath = './{dataset_name}', output_writer = None, 
                     output_writer_3d = None,
                     output_filename_prefix = None, output_kwargs={}):
 
@@ -777,6 +777,15 @@ def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
     Passed to GLMGridder.write_grids:
         outpath, output_writer, output_writer_3d,
         output_kwargs, output_filename_prefix
+    For GLMlutGridder.write_grids, all of the above are passed, 
+        but only output_kwargs and outpath are used.
+        outpath can be a template string; defaults to {'./{dataset_name}'}
+        Available named arguments in the template are:
+            dataset_name: standard GOES imagery format, includes '.nc'. Looks like
+                OR_GLM-L2-GLMM1-M3_G16_s20181830432000_e20181830433000_c20200461148520.nc
+            start_time, end_time: datetimes that can be used with strftime syntax, e.g.
+                './{start_time:%y/%b/%d}/GLM_{start_time:%Y%m%d_%H%M%S}.nc'
+        
     Remaining keyword arguments are passed to the GLMGridder on initialization.
     """
 

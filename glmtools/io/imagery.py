@@ -443,15 +443,21 @@ def infer_scene_from_dataset(x, y):
         scene_id = "OTHER"
     return scene_id, resolution
 
-def write_goes_imagery(gridder, outpath='.', pad=None, scale_and_offset=True):
+def write_goes_imagery(gridder, outpath='./{dataset_name}', pad=None, scale_and_offset=True):
     """ pad is a tuple of x_slice, y_slice: slice objects used to index the
             zeroth and first dimensions, respectively, of the grids in gridder.
     
         scale_and_offset controls whether to write variables as scaled ints.
         if False, floating point grids will be written.
-        
+    
+        outpath can be a template string; defaults to {'./{dataset_name}'}
+        Available named arguments in the template are:
+            dataset_name: standard GOES imagery format, includes '.nc'. Looks like
+                OR_GLM-L2-GLMM1-M3_G16_s20181830432000_e20181830433000_c20200461148520.nc
+            start_time, end_time: datetimes that can be used with strftime syntax, e.g.
+                './{start_time:%y/%b/%d}/GLM_{start_time:%Y%m%d_%H%M%S}.nc'
+        Intermediate directories will be created to match outpath.
     """
-                # output_filename_prefix="LMA", **output_kwargs):
     self = gridder
     if pad is not None:
         x_slice, y_slice = pad
@@ -501,8 +507,12 @@ def write_goes_imagery(gridder, outpath='.', pad=None, scale_and_offset=True):
         dataset = dataset.assign_attrs(**global_attrs)
         # log.debug("*** Checking x coordinate attrs initial")
         # log.debug(dataset.x.attrs)
-                
-        outfile = os.path.join(outpath, dataset.attrs['dataset_name'])
+
+        outfile = outpath.format(start_time=start, end_time=end,
+                                 dataset_name=dataset.attrs['dataset_name'])
+        enclosing_dir = os.path.dirname(outfile)
+        if os.path.exists(enclosing_dir) == False:
+            os.makedirs(enclosing_dir)
 
         # Adding a new variable to the dataset below clears the coord attrs
         # so hold on to them for now.

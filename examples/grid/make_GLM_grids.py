@@ -5,8 +5,11 @@ independently, or if not provided they will be inferred from the filenames.
 Grid spacing is regular in latitude and longitude with the grid box
 being sized to match the requested dx, dy at the center of the grid.
 
-Within the output directory, a year/month/day directory will be created,
-e.g., 2017/Jul/04/, and within that directory the grid files will be created.
+By default, data will be saved to the current directory within a year/month/day
+directory (e.g., 2017/Jul/04/), and within that directory the grid files will be
+created according to the standard GOES imagery naming convention. This behavior
+can be fully controlled by adjusting the -o argument, which defaults to the path
+template {start_time:%Y/%b/%d}/{dataset_name} within the current directory.
 
 Therefore, this script can be used to process multiple days and they will
 be written to a standardized directory structure.
@@ -14,8 +17,16 @@ be written to a standardized directory structure.
 def create_parser():
     parser = argparse.ArgumentParser(description=parse_desc)
     parser.add_argument(dest='filenames',metavar='filename', nargs='*')
-    parser.add_argument('-o', '--output_dir', metavar='directory',
-                        required=True, dest='outdir', action='store', )
+    parser.add_argument('-o', '--output_path', metavar='filename template including path',
+                        required=False, dest='outdir', action='store',
+                        default='{start_time:%Y/%b/%d}/{dataset_name}',
+                        help="Specify the output path and filename using a"
+                        " configurable path template. {dataset_name} will"
+                        " generate a filename using standard GOES imagery"
+                        " naming convention, including a .nc extension."
+                        " All allowed names in the template are listed in"
+                        " the docs for glmtools.io.imagery.write_goes_imagery."
+                        " Defaults to {start_time:%%Y/%%b/%%d}/{dataset_name}")
     parser.add_argument('--ctr_lat', metavar='latitude', required=False,
                         dest='ctr_lat', action='store', type=float,
                         help='center latitude')
@@ -180,13 +191,9 @@ def grid_setup(args):
         end_time = max(filename_ends)
 
     date = datetime(start_time.year, start_time.month, start_time.day)
-    # grid_dir = os.path.join('/data/LCFA-production/', 'grid_test')
-    # outpath = grid_dir+'/20%s' %(date.strftime('%y/%b/%d'))
-    outpath = os.path.join(args.outdir, '20%s' %(date.strftime('%y/%b/%d')))
-    if os.path.exists(outpath) == False:
-        os.makedirs(outpath)
-        # subprocess.call(['chmod', 'a+w', outpath, grid_dir+'/20%s' %(date.strftime('%y/%b')), grid_dir+'/20%s' %(date.strftime('%y'))])
 
+    outpath = args.outdir
+    
     if args.fixed_grid:
         proj_name = 'geos'
 
