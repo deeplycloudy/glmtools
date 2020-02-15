@@ -184,10 +184,10 @@ def get_goes_imager_fixedgrid_coords(x, y, resolution='2km at nadir',
     two_km_enc = {
         'FULL':{'dtype':'int16', 'x':{'scale_factor': 0.000056,
                                       'add_offset':-0.151844,
-                                      '_FillValue':-999.0},
+                                      '_FillValue':fill},
                                  'y':{'scale_factor':-0.000056,
                                       'add_offset':0.151844,
-                                      '_FillValue':-999.0},
+                                      '_FillValue':fill},
                },
     # The PUG has specific values for the CONUS sector, and
     # given the discretization of the coords to 2 km resolution, is it necessary
@@ -204,11 +204,14 @@ def get_goes_imager_fixedgrid_coords(x, y, resolution='2km at nadir',
     # two_km_enc['OTHER'] = two_km_enc['MESO1']
     
     x_meta, y_meta = {}, {}
-    x_enc = two_km_enc['FULL']['x']
-    x_enc['dtype'] = two_km_enc[scene_id]['dtype']
-    y_enc = two_km_enc['FULL']['y']
-    y_enc['dtype'] = two_km_enc[scene_id]['dtype']
-
+    # changed by feng for isatss on sep 04, 2019
+    #x_enc = two_km_enc['FULL']['x']
+    #x_enc['dtype'] = two_km_enc[scene_id]['dtype']
+    #y_enc = two_km_enc['FULL']['y']
+    #y_enc['dtype'] = two_km_enc[scene_id]['dtype']
+    x_enc = {'dtype':'float32','_FillValue':fill}
+    y_enc = {'dtype':'float32','_FillValue':fill}
+    # end by feng
     
     x_meta['axis'] = "X"
     x_meta['long_name'] = "GOES fixed grid projection x-coordinate"
@@ -435,7 +438,8 @@ def infer_scene_from_dataset(x, y):
         scene_id = "OTHER"
     return scene_id
 
-def write_goes_imagery(gridder, outpath='.', pad=None, scale_and_offset=True):
+# add one argument "output_filename_prefix" to def write_goes_imagery by feng on sep 04, 2019
+def write_goes_imagery(gridder, outpath='.', pad=None, output_filename_prefix=None, scale_and_offset=True):
     """ pad is a tuple of x_slice, y_slice: slice objects used to index the
             zeroth and first dimensions, respectively, of the grids in gridder.
     
@@ -482,6 +486,7 @@ def write_goes_imagery(gridder, outpath='.', pad=None, scale_and_offset=True):
         dataset, scene_id = new_goes_imagery_dataset(x_coord,
                                         np.flipud(y_coord), nadir_lon)
 
+        #closed by feng for isatss on sep. 04, 2019
         # Global metadata
         global_attrs = get_glm_global_attrs(start, end,
                 "G16", "GOES-East", "GLM-1", scene_id,
@@ -491,7 +496,11 @@ def write_goes_imagery(gridder, outpath='.', pad=None, scale_and_offset=True):
         # log.debug("*** Checking x coordinate attrs initial")
         # log.debug(dataset.x.attrs)
                 
-        outfile = os.path.join(outpath, dataset.attrs['dataset_name'])
+        #outfile = os.path.join(outpath, dataset.attrs['dataset_name'])
+
+        dataset_name = output_filename_prefix+"_whole_fields.nc" 
+        outfile = os.path.join(outpath, dataset_name)
+        # end by feng
 
         # Adding a new variable to the dataset below clears the coord attrs
         # so hold on to them for now.

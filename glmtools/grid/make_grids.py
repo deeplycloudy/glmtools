@@ -595,19 +595,24 @@ class GLMlutGridder(GLMGridder):
 
         self.divide_grids[2]=0
         self.divide_grids[6]=4
-        
+
     def write_grids(self, outpath = '', output_writer = None, 
                     output_writer_3d = None,
                     output_filename_prefix = None, output_kwargs={}):
-
+     
+        #print('output_filename_prefix=',output_filename_prefix)
         pad = output_kwargs.pop('pad', None)
-        scale_and_offset = output_kwargs.pop('scale_and_offset', True)
+        # changed by feng for isatss on sep. 04,2019
+        #   no scale and offset for outputs;
+        #   use 'output_filename_prefix' for output filename.
+        #scale_and_offset = output_kwargs.pop('scale_and_offset', True)
+        scale_and_offset = False
 
         from glmtools.io.imagery import write_goes_imagery
         all_outfiles = write_goes_imagery(self, outpath=outpath, pad=pad,
-            scale_and_offset=scale_and_offset)
+           output_filename_prefix=output_filename_prefix, scale_and_offset=scale_and_offset)
+        #end by feng
         return all_outfiles
-
 
 def subdivide_bnd(bnd, delta, s=8):
     """
@@ -808,6 +813,7 @@ def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
         process_flash_kwargs['lat_bnd'] = kwargs['y_bnd']
         subgrids = [((0, 0), kwargs, process_flash_kwargs, out_kwargs, pads)]
     elif 'fixed_grid' in process_flash_kwargs:
+        #out_kwargs['calculate_2D_lonlat'] = False
         subgrids = subdivided_fixed_grid(kwargs, process_flash_kwargs,
                                          out_kwargs, s=subdivide_grid)
     else:
@@ -820,12 +826,12 @@ def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
     this_proc_each_grid = partial(proc_each_grid, start_time=start_time,
         end_time=end_time, GLM_filenames=GLM_filenames)
 
-    # if subdivide_grid > 1:
-    #     pool = ProcessPoolExecutor(max_workers=4)
-    #     with pool:
-    #         # Block until the pool completes (pool is a context manager)
-    #         outputs = pool.map(this_proc_each_grid, subgrids)
-    # else:
+    #if subdivide_grid > 1:
+    #    pool = ProcessPoolExecutor(max_workers=4)
+    #    with pool:
+    #        # Block until the pool completes (pool is a context manager)
+    #        outputs = pool.map(this_proc_each_grid, subgrids)
+    #else:
     outputs = list(map(this_proc_each_grid, subgrids))
     for op in outputs:
         log.debug(outputs)
@@ -852,7 +858,7 @@ def proc_each_grid(subgrid, start_time=None, end_time=None, GLM_filenames=None):
     GLM_filenames -- a list of GLM filenames to process
     """
 
-    subgridij, kwargsij, process_flash_kwargs_ij, out_kwargs_ij, pads = subgrid
+    subgridij, kwargsij, process_flash_kwargs_ij, out_kwargs_ij, pads = subgrid 
     ellipse_rev = process_flash_kwargs_ij.pop('ellipse_rev')
 
     # Eventually, we want to trim off n_x/y_pad from each side of the grid
