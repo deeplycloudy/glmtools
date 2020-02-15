@@ -93,10 +93,12 @@ For instance, the following command, using the included sample data will grid
 one minute of data (3 GLM files) on the ABI fixed grid in the CONUS sector at 2
 km resolution. These images will overlay precisely on the ABI cloud tops, and
 will have parallax with respect to ground for all the same reasons ABI does.
+Output will be placed in the current directory in a new 2018/Jul/02 directory
+created by default.
 
 .. code-block:: bash
 
-    python make_GLM_grids.py -o /path/to/output/
+    python make_GLM_grids.py
     --fixed_grid --split_events \
     --goes_position east --goes_sector conus \
     --dx=2.0 --dy=2.0 \
@@ -109,7 +111,7 @@ If you don't need the whole conus sector, you can instead plot on a mesoscale do
 
 .. code-block:: bash
 
-    python make_GLM_grids.py -o /path/to/output/
+    python make_GLM_grids.py
     --fixed_grid --split_events \
     --goes_position east --goes_sector meso \
     --dx=2.0 --dy=2.0 \
@@ -122,7 +124,7 @@ Finally, if you want a fully custom grid size, you can omit the ``--goes_sector`
 
 .. code-block:: bash
 
-    python make_GLM_grids.py -o /path/to/output/
+    python make_GLM_grids.py
     --fixed_grid --split_events \
     --goes_position east \
     --dx=2.0 --dy=2.0 --width="1000.0" --height="500.0" \
