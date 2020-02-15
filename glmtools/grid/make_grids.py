@@ -876,6 +876,8 @@ def proc_each_grid(subgrid, start_time=None, end_time=None, GLM_filenames=None):
         process_flash_kwargs_ij['clip_events'] = mesh
         log.debug(("XEDGE", subgridij, xedge.min(), xedge.max(), xedge.shape))
         log.debug(("YEDGE", subgridij, yedge.min(), yedge.max(), yedge.shape))
+
+    saved_first_file_metadata = False
     for filename in GLM_filenames:
         # Could create a cache of GLM objects by filename here.
         log.info("Processing {0}".format(filename))
@@ -890,6 +892,10 @@ def proc_each_grid(subgrid, start_time=None, end_time=None, GLM_filenames=None):
             # xarray 0.12.1 (and others?) throws an error when trying to load
             # data from an empty dimension.
             glm.dataset.load()
+
+            if not saved_first_file_metadata:
+                gridder.first_file_attrs = dict(glm.dataset.attrs)
+                saved_first_file_metadata = True
             gridder.process_flashes(glm, **process_flash_kwargs_ij)
         else:
             log.info("Skipping {0} - number of events is 0".format(filename))
