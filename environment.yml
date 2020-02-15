@@ -13,5 +13,5 @@ dependencies:
 - scipy
 - xarray
 - pip:
-  - git+https://github.com/deeplycloudy/lmatools.git@minvaluegrids
+  - git+https://github.com/deeplycloudy/lmatools.git
   - git+https://github.com/deeplycloudy/stormdrain.git
