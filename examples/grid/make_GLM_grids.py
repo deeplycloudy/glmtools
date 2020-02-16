@@ -5,28 +5,28 @@ independently, or if not provided they will be inferred from the filenames.
 Grid spacing is regular in latitude and longitude with the grid box
 being sized to match the requested dx, dy at the center of the grid.
 
-By default, data will be saved to the current directory within a year/month/day
-directory (e.g., 2017/Jul/04/), and within that directory the grid files will be
-created according to the standard GOES imagery naming convention. This behavior
-can be fully controlled by adjusting the -o argument, which defaults to the path
-template {start_time:%Y/%b/%d}/{dataset_name} within the current directory.
-
-Therefore, this script can be used to process multiple days and they will
-be written to a standardized directory structure.
+By default, data will be saved to the current directory according to the
+standard GOES imagery naming convention. This behavior can be fully controlled
+by adjusting the -o argument.
 """
+
+output_help = """Specify the output path and filename using a configurable path
+template. -o ./{dataset_name} (the default) will generate files in the current
+directory using the standard GOES imagery naming convention, including a .nc
+extension. Any intermediate directories will be created as needed. All allowed
+names in the template are listed in the docs for
+glmtools.io.imagery.write_goes_imagery. For example: this script can be used to
+process multiple days and that are written to a standardized directory
+structure by specifying a path like so: -o
+{start_time:%%Y/%%b/%%d}/{dataset_name}"""
+
 def create_parser():
     parser = argparse.ArgumentParser(description=parse_desc)
     parser.add_argument(dest='filenames',metavar='filename', nargs='*')
-    parser.add_argument('-o', '--output_path', metavar='filename template including path',
+    parser.add_argument('-o', '--output_path',
+                        metavar='filename template including path',
                         required=False, dest='outdir', action='store',
-                        default='{start_time:%Y/%b/%d}/{dataset_name}',
-                        help="Specify the output path and filename using a"
-                        " configurable path template. {dataset_name} will"
-                        " generate a filename using standard GOES imagery"
-                        " naming convention, including a .nc extension."
-                        " All allowed names in the template are listed in"
-                        " the docs for glmtools.io.imagery.write_goes_imagery."
-                        " Defaults to {start_time:%%Y/%%b/%%d}/{dataset_name}")
+                        default='./{dataset_name}', help=output_help)
     parser.add_argument('--ctr_lat', metavar='latitude', required=False,
                         dest='ctr_lat', action='store', type=float,
                         help='center latitude')
