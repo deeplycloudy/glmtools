@@ -366,7 +366,7 @@ def new_goes_imagery_dataset(x, y, nadir_lon):
     # Dimensions
     dims = ('y', 'x')
     
-    scene_id = infer_scene_from_dataset(x, y)
+    scene_id, nominal_resolution = infer_scene_from_dataset(x, y)
     log.debug("Span of grid implies scene is {0}".format(scene_id))
 
     # Coordinate data: x, y
@@ -390,7 +390,7 @@ def new_goes_imagery_dataset(x, y, nadir_lon):
     d.x.attrs.update(xc.attrs)
     d.y.attrs.update(yc.attrs)
     
-    return d, scene_id
+    return d, scene_id, nominal_resolution
 
 def xy_to_2D_lonlat(gridder, x_coord, y_coord):
     self = gridder
@@ -417,11 +417,19 @@ def pairwise(iterable):
 
 def infer_scene_from_dataset(x, y):
     "Infer whether the scene matches one of the GOES-R fixed grid domains."
-    from lmatools.grid.fixed import goesr_conus, goesr_meso, goesr_full
+    from lmatools.grid.fixed import goesr_conus, goesr_meso, goesr_full, goesr_resolutions
+    rtol = 1.0e-2
+
+    # Try to match up the actual spacing in microradians with a known resolutions
+    dx = np.abs(x[1]-x[0])
+    resolution = '{:d}microradian at nadir'.format(int(np.round(dx*1e6)))
+    for km, microrad in goesr_resolutions.items():
+        if np.allclose(microrad, dx, rtol=rtol):
+            resolution = km.replace('.0', '') + ' at nadir'
+
     spanEW = x.max() - x.min()
     spanNS = y.max() - y.min()
     log.debug("Inferring scene from spans x={0}, y={1}".format(spanEW, spanNS))
-    rtol = 1.0e-2
     if   (np.allclose(spanEW, goesr_full['spanEW'], rtol=rtol) &
           np.allclose(spanNS, goesr_full['spanNS'], rtol=rtol) ):
         scene_id = "FULL"
@@ -433,17 +441,23 @@ def infer_scene_from_dataset(x, y):
         scene_id = "MESO1"
     else:
         scene_id = "OTHER"
-    return scene_id
+    return scene_id, resolution
 
-def write_goes_imagery(gridder, outpath='.', pad=None, scale_and_offset=True):
+def write_goes_imagery(gridder, outpath='./{dataset_name}', pad=None, scale_and_offset=True):
     """ pad is a tuple of x_slice, y_slice: slice objects used to index the
             zeroth and first dimensions, respectively, of the grids in gridder.
     
         scale_and_offset controls whether to write variables as scaled ints.
         if False, floating point grids will be written.
-        
+    
+        outpath can be a template string; defaults to {'./{dataset_name}'}
+        Available named arguments in the template are:
+            dataset_name: standard GOES imagery format, includes '.nc'. Looks like
+                OR_GLM-L2-GLMM1-M3_G16_s20181830432000_e20181830433000_c20200461148520.nc
+            start_time, end_time: datetimes that can be used with strftime syntax, e.g.
+                './{start_time:%y/%b/%d}/GLM_{start_time:%Y%m%d_%H%M%S}.nc'
+        Intermediate directories will be created to match outpath.
     """
-                # output_filename_prefix="LMA", **output_kwargs):
     self = gridder
     if pad is not None:
         x_slice, y_slice = pad
@@ -479,19 +493,26 @@ def write_goes_imagery(gridder, outpath='.', pad=None, scale_and_offset=True):
         # upper left in the GOES-R series L1b PUG (section 5.1.2.6 Product Data
         # Structures). Later, to follow the image array convention will
         # transpose the grids and then flipud.
-        dataset, scene_id = new_goes_imagery_dataset(x_coord,
+        dataset, scene_id, nominal_resolution = new_goes_imagery_dataset(x_coord,
                                         np.flipud(y_coord), nadir_lon)
 
         # Global metadata
+        l2lcfa_attrs = gridder.first_file_attrs
+        
         global_attrs = get_glm_global_attrs(start, end,
-                "G16", "GOES-East", "GLM-1", scene_id,
-                "2km at nadir", "ABI Mode 3", "DE", "Postprocessed", "TTU"
+                l2lcfa_attrs['platform_ID'], l2lcfa_attrs['orbital_slot'],
+                l2lcfa_attrs['instrument_ID'], scene_id,
+                nominal_resolution, "ABI Mode 3", "DE", "Postprocessed", "TTU"
                 )
         dataset = dataset.assign_attrs(**global_attrs)
         # log.debug("*** Checking x coordinate attrs initial")
         # log.debug(dataset.x.attrs)
-                
-        outfile = os.path.join(outpath, dataset.attrs['dataset_name'])
+
+        outfile = outpath.format(start_time=start, end_time=end,
+                                 dataset_name=dataset.attrs['dataset_name'])
+        enclosing_dir = os.path.dirname(outfile)
+        if os.path.exists(enclosing_dir) == False:
+            os.makedirs(enclosing_dir)
 
         # Adding a new variable to the dataset below clears the coord attrs
         # so hold on to them for now.
