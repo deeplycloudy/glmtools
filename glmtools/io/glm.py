@@ -151,7 +151,8 @@ def event_areas(flash_data):
 
 class GLMDataset(OneToManyTraversal):
     def __init__(self, filename, calculate_parent_child=True, ellipse_rev=-1,
-                 check_area_units=True):
+                 check_area_units=True, change_energy_units=True,
+                 fix_bad_DO07_times=True):
         """ filename is any data source which works with xarray.open_dataset
 
             By default, helpful additional parent-child data are calculated,
@@ -175,8 +176,21 @@ class GLMDataset(OneToManyTraversal):
 
             check_area_units: If True (default) check the units on flash
                 and group area and convert to km^2 if in m^2.
+            change_energy_units: If True (default) change the units of flash,
+                group, and event energy to nJ.
+            fix_bad_DO07_times: If True (default), correct for the missing
+                _Unsigned attribute for the ~month in Oct-Nov 2018 when the
+                problem was present.
         """
-        dataset = xr.open_dataset(filename)
+        self.entity_ids = ['flash_id', 'group_id', 'event_id']
+        self.parent_ids = ['group_parent_flash_id', 'event_parent_group_id']
+
+        if isinstance(filename, xr.Dataset):
+            dataset = filename
+            super().__init__(dataset,
+                             self.entity_ids, self.parent_ids)
+        else:
+            dataset = xr.open_dataset(filename)
         self._filename = filename
         self.ellipse_rev = ellipse_rev
 
@@ -186,9 +200,6 @@ class GLMDataset(OneToManyTraversal):
         self.gr_dim = 'number_of_groups'
         self.ev_dim = 'number_of_events'
         self.fl_dim = 'number_of_flashes'
-
-        self.entity_ids = ['flash_id', 'group_id', 'event_id']
-        self.parent_ids = ['group_parent_flash_id', 'event_parent_group_id']
 
         if calculate_parent_child:
             # sets self.dataset
@@ -200,8 +211,12 @@ class GLMDataset(OneToManyTraversal):
         else:
             self.dataset = dataset
 
+        if fix_bad_DO07_times:
+            did_fix = self._check_and_fix_missing_unsigned_time(filename)
         if check_area_units:
             did_fix = self._check_area_units()
+        if change_energy_units:
+            did_fix = self._change_energy_units()
 
     def __init_parent_child_data(self):
         """ Calculate implied parameters that are useful for analyses
@@ -256,6 +271,34 @@ class GLMDataset(OneToManyTraversal):
                                                dims=[self.fl_dim,])
         self.dataset['flash_child_event_count'] = flash_child_event_count
 
+    def _change_energy_units(self):
+        """ Change the flash energy units to nJ.
+        Doesn't change the scale/offset, so the discretization of values
+        if this L2 dataset were to be written to disk. glmtools does not
+        do this, but it might be noticed if someone tried to!
+        """
+        changed_flash_energy, changed_group_energy, changed_event_energy = (
+            False, False, False)
+        if self.dataset.flash_energy.units == 'J':
+            self.dataset['flash_energy'] = self.dataset['flash_energy']*1.0e9
+            self.dataset.flash_energy.attrs['units'] = 'nJ'
+            changed_flash_energy = True
+        else:
+            raise ValueError("Flash energy units have changed from PUG v.2.0")
+        if self.dataset.group_energy.units == 'J':
+            self.dataset['group_energy'] = self.dataset['group_energy']*1.0e9
+            self.dataset.group_energy.attrs['units'] = 'nJ'
+            changed_group_energy = True
+        else:
+            raise ValueError("Group energy units have changed from PUG v.2.0")
+        if self.dataset.event_energy.units == 'J':
+            self.dataset['event_energy'] = self.dataset['event_energy']*1.0e9
+            self.dataset.event_energy.attrs['units'] = 'nJ'
+            changed_event_energy = True
+        else:
+            raise ValueError("Event energy units have changed from PUG v.2.0")
+        return changed_flash_energy, changed_group_energy, changed_event_energy
+
     def _check_area_units(self):
         fixed_flash_area, fixed_group_area = False, False
         if self.dataset.flash_area.units == 'm2':
@@ -298,6 +341,50 @@ class GLMDataset(OneToManyTraversal):
         # for bad_id in bad_ids:
         #     log.debug("{0}".format(self.get_flashes([bad_id])))
         return np.unique(flash_ids)
+
+    def _check_and_fix_missing_unsigned_time(self, filename):
+        """ Check for the missing _Unsigned attribute on files created as part of the
+        D0.07 build of the operational environment. Correct if present. The problem
+        was only present for less than a month, and this function does nothing if
+        the data file is outside that time range.
+
+        Modifies self.dataset to have the correct times.
+        """
+        vars_to_correct = ['event_time_offset','group_time_offset',
+                           'group_frame_time_offset',
+                           'flash_time_offset_of_first_event',
+                           'flash_time_offset_of_last_event',
+                           'flash_frame_time_offset_of_first_event',
+                           'flash_frame_time_offset_of_last_event']
+
+        start_g16_problem_date = np.datetime64('2018-10-15T00:00:00')
+        end_g16_problem_date = np.datetime64('2018-11-06T00:00:00')
+        prod_tmin, prod_tmax = self.dataset.product_time_bounds.data
+        in_time = (prod_tmin >= start_g16_problem_date) & (prod_tmax <= end_g16_problem_date)
+        # The date range is approximate, and corresponds to when D0.07 first was
+        # in production in the OE, and before the _Unsigned attribute was added to
+        # the production data files. We don't know the exact start time, but fortunately
+        # the group_frame_time_offset was also added to D0.07, so we look for that attribute
+        # within the date range. Later, adding the attribute to a file that already has it
+        # is no problem, so we don't worry about the last time on Nov 6 when the fix is needed.
+        if (in_time & hasattr(self.dataset,'group_frame_time_offset')):
+            unmod = xr.open_dataset(filename, mask_and_scale=False, decode_cf=False)
+            time_dataset = xr.Dataset()
+            for var in vars_to_correct:
+                # Add the _Unsigned attribute
+                da = getattr(unmod,var)
+                da.attrs['_Unsigned']='true'
+                time_dataset[var] = da
+
+            decoded = xr.decode_cf(time_dataset)
+
+            # Copy corrected time variables over to the new dataset
+            for var in vars_to_correct:
+                self.dataset[var] = decoded[var]
+            unmod.close()
+            return True
+        else:
+            return False
 
     @property
     def fov_bounds(self):
@@ -466,6 +553,8 @@ def get_lutevents(dataset, scale_factor=28e-6, event_dim='number_of_events',
     xy_id = discretize_2d_location(event_x, event_y, scale_factor, x_range, y_range)
     dataset['event_parent_lutevent_id'] = xr.DataArray(xy_id, dims=[event_dim,])
     eventlut_groups = dataset.groupby('event_parent_lutevent_id')
+    flash_id_groupby = dataset.groupby('flash_id')
+    group_id_groupby = dataset.groupby('group_id')
     n_lutevents = len(eventlut_groups.groups)
 
     # Create a new dimension for the reduced set of events, with their
@@ -473,6 +562,7 @@ def get_lutevents(dataset, scale_factor=28e-6, event_dim='number_of_events',
     # - Sum: event_energy, flash_area, group_area
     # - Mean: event_x, event_y
     # - Count: event_id; unique flash_id, group_id
+    # - Min: flash_area
     eventlut_dtype = [('lutevent_id', 'u8'),
                       ('lutevent_x', 'f8'),
                       ('lutevent_y', 'f8'),
@@ -482,39 +572,62 @@ def get_lutevents(dataset, scale_factor=28e-6, event_dim='number_of_events',
                       ('lutevent_group_count', 'f4'),
                       ('lutevent_total_flash_area', 'f8'),
                       ('lutevent_total_group_area', 'f8'),
-                      ('lutevent_time_offset', '<M8[ns]')
+                      ('lutevent_time_offset', '<M8[ns]'),
+                      ('lutevent_min_flash_area', 'f8')
                       ]
-    def event_lut_iter(event_lut_groupby, flash_groupby, group_groupby):
-        flash_groups = flash_groupby.groups
-        group_groups = group_groupby.groups
-        for xy_id, evids in event_lut_groupby.groups.items():
-            flash_ids = np.unique(ev_flash_id[evids])
-            group_ids = np.unique(ev_group_id[evids])
-            flash_count, group_count = len(flash_ids), len(group_ids)
-            total_flash_area = sum((flash_area[flash_groups[fid]].sum()
-                for fid in flash_ids))
-            total_group_area = sum((group_area[group_groups[gid]].sum()
-                for gid in group_ids))
-            yield (xy_id,
-                   event_x[evids].mean(),
-                   event_y[evids].mean(),
-                   event_energy[evids].sum(),
-                   len(evids),
-                   flash_count,
-                   group_count,
-                   total_flash_area,
-                   total_group_area,
-                   product_time
-                   )
 
-    lut_iter = event_lut_iter(eventlut_groups,
-                              dataset.groupby('flash_id'),
-                              dataset.groupby('group_id'))
+    lut_iter = event_lut_iter(eventlut_groups, flash_id_groupby, group_id_groupby,
+                   event_x, event_y, event_energy, product_time,
+                   ev_flash_id, ev_group_id, flash_area, group_area)
     event_lut = np.fromiter(lut_iter, dtype=eventlut_dtype, count=n_lutevents)
     lutevents = xr.Dataset.from_dataframe(
                     pd.DataFrame(event_lut).set_index('lutevent_id'))
     dataset.update(lutevents)
     return dataset
+
+
+def event_lut_iter(event_lut_groupby, flash_groupby, group_groupby,
+                   event_x, event_y, event_energy, product_time,
+                   ev_flash_id, ev_group_id, flash_area, group_area):
+    flash_groups = flash_groupby.groups
+    group_groups = group_groupby.groups
+    total_abs_area_delta = 0.0
+    total_area = 0.0
+    for xy_id, evids in event_lut_groupby.groups.items():
+        flash_ids = np.unique(ev_flash_id[evids])
+        group_ids = np.unique(ev_group_id[evids])
+        flash_count, group_count = len(flash_ids), len(group_ids)
+        # old_flash_area = sum((flash_area[flash_groups[fid]].sum()
+        #     for fid in flash_ids))
+        replicated_flashes = list(itertools.chain.from_iterable(
+            flash_groups[fid] for fid in flash_ids))
+        total_flash_area = flash_area[replicated_flashes].sum()
+        # total_abs_area_delta += np.abs(total_flash_area - old_flash_area)
+        # total_area += total_flash_area
+        # print(total_abs_area_delta, total_area)
+        # old_group_area = sum((group_area[group_groups[gid]].sum()
+        #     for gid in group_ids))
+        replicated_groups = list(itertools.chain.from_iterable(
+            group_groups[gid] for gid in group_ids))
+        total_group_area = group_area[replicated_groups].sum()
+        # total_abs_area_delta += np.abs(total_group_area - old_group_area)
+        # total_area += total_group_area
+        # print(total_abs_area_delta, total_area)
+        min_flash_area = min((flash_area[flash_groups[fid]].min()
+            for fid in flash_ids))
+        yield (xy_id,
+               event_x[evids].mean(),
+               event_y[evids].mean(),
+               event_energy[evids].sum(),
+               len(evids),
+               flash_count,
+               group_count,
+               total_flash_area,
+               total_group_area,
+               product_time,
+               min_flash_area
+               )
+
 
 def discretize_2d_location(x, y, scale, x_range, y_range, int_type='uint64'):
     """ Calculate a unique location ID for a 2D position given some
