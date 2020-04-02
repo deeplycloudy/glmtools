@@ -77,7 +77,9 @@ def create_parser():
                         help=("One of [full|conus|meso]. "
                               "Also requires goes_position. If sector is "
                               "meso, ctr_lon and ctr_lat are interpreted as "
-                              "the ctr_x and ctr_y of the fixed grid"))
+                              "the ctr_x and ctr_y of the fixed grid. "
+                              "Omit if you are creating a fully custom grid "
+                              "with --width and --height arguments."))
     parser.add_argument('--corner_points', metavar='filename.pickle',
                         action='store', dest='corner_points', 
                         help=("name of file containing a pickled "
