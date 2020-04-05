@@ -439,6 +439,10 @@ def infer_scene_from_dataset(x, y):
     elif (np.allclose(spanEW, goesr_meso['spanEW'], rtol=rtol) &
           np.allclose(spanNS, goesr_meso['spanNS'], rtol=rtol) ):
         scene_id = "MESO1"
+    elif (np.allclose(spanEW, 0.172732, rtol=rtol)):
+        # This is the "expanded CONUS" domain for GOES-West;
+        #  see lmatools.grid.fixed for further details.
+        scene_id = "CONUS"
     else:
         scene_id = "OTHER"
     return scene_id, resolution
