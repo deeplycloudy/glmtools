@@ -175,7 +175,9 @@ class GLMDataset(OneToManyTraversal):
                 1 : first revision, lowering equatorial height to 14 km.
 
             check_area_units: If True (default) check the units on flash
-                and group area and convert to km^2 if in m^2.
+                and group area and convert to km^2 if in m^2. Also fix any
+                areas that exceed the max allowed (10000 km^2) in early
+                LCFA files by changing them from unknown to the max.
             change_energy_units: If True (default) change the units of flash,
                 group, and event energy to nJ.
             fix_bad_DO07_times: If True (default), correct for the missing
@@ -214,6 +216,9 @@ class GLMDataset(OneToManyTraversal):
         if fix_bad_DO07_times:
             did_fix = self._check_and_fix_missing_unsigned_time(filename)
         if check_area_units:
+            # Check for missing areas (from overflow of the max value
+            # allowed by the scale_factor) before ensuring units are always km^2
+            did_fix = self._check_area_overflow()
             did_fix = self._check_area_units()
         if change_energy_units:
             did_fix = self._change_energy_units()
@@ -298,6 +303,34 @@ class GLMDataset(OneToManyTraversal):
         else:
             raise ValueError("Event energy units have changed from PUG v.2.0")
         return changed_flash_energy, changed_group_energy, changed_event_energy
+
+    def _check_area_overflow(self):
+        """Look for flash areas that have _FillValue, which means that they were
+        larger than the allowed value defined by scale_factor and add_offset.
+
+        We set the value to one in excess of valid_range in the original L2 LCFA
+        dataset, but that's ok because the output NetCDF from this code here
+        uses a different (larger) scaling of 1.0 km to accomodate these larger
+        areas.
+        """
+        max_fl_area = (self.dataset.flash_area.encoding['add_offset'] +
+                       self.dataset.flash_area.encoding['scale_factor'] *
+                       self.dataset.flash_area.encoding['_FillValue'])
+        max_gr_area = (self.dataset.group_area.encoding['add_offset'] +
+                       self.dataset.group_area.encoding['scale_factor'] *
+                       self.dataset.group_area.encoding['_FillValue'])
+        overflow_gr_areas = np.isnan(self.dataset.group_area)
+        overflow_fl_areas = np.isnan(self.dataset.flash_area)
+        fixed_fl_area, fixed_gr_area = False, False
+        if overflow_gr_areas.any():
+            log.debug("Setting overflow group areas to the maximum value {0}".format(max_gr_area))
+            self.dataset.group_area[overflow_gr_areas] = max_gr_area
+            fixed_gr_area = True
+        if overflow_fl_areas.any():
+            log.debug("Setting overflow flash areas to the maximum value {0}".format(max_fl_area))
+            self.dataset.flash_area[overflow_fl_areas] = max_fl_area
+            fixed_fl_area = True
+        return fixed_fl_area, fixed_gr_area
 
     def _check_area_units(self):
         fixed_flash_area, fixed_group_area = False, False
