@@ -344,6 +344,11 @@ def glm_image_to_var(data, name, long_name, units, dims, fill=0.0,
         enc['dtype'] = dtype
         if scale_factor is not None:
             enc['scale_factor'] = scale_factor
+            min_allowed = scale_factor
+            if add_offset is not None:
+                min_allowed += add_offset
+            tiny = (data > 0.0) & (data <= min_allowed)
+            data[tiny] = min_allowed
         if add_offset is not None:
             enc['add_offset'] = add_offset
     meta['standard_name'] = name
