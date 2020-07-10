@@ -580,6 +580,14 @@ def aggregate(glm, minutes, start_end=None):
             of interest, for example. If not provided, the start of the glm dataset plus
             *minutes* after the end of the glm dataset will be used.
 
+        This function expects the GLM data to have missing values (NaN) where
+        there is no lightning and relies on the skipna functionality of
+        DataArray.min() and .sum() to find the aggregation across frames where
+        each pixel has a mix of lightning and no-lightnign times. If these
+        frames instead had zero for minimum flash area the minimum value would
+        be zero, leading to data loss and a clear difference between FED and
+        MFA.
+
         To restore the original time coordinate name, choose the left, mid, or right
         endpoint of the time_bins coordinate produced by the aggregation step.
         >>> agglm = aggregate(glm, 5)
@@ -624,13 +632,10 @@ def aggregate(glm, minutes, start_end=None):
     t_groups_sum = sum_data.groupby_bins('time', bins=t_bins)
     t_groups_min = min_data.groupby_bins('time', bins=t_bins)
 
-    # Take the minimum of anything along the minimum dimension. We need to account for
-    # zero values, however, so that we don't cancel out pixels where there is a flash in
-    # one minute but not the other. TODO TODO TODO
-    aggregated_min = t_groups_min.min(dim='time', keep_attrs=True)
+    aggregated_min = t_groups_min.min(dim='time', keep_attrs=True, skipna=True)
 
     # Naively sum all variables … so average areas are now ill defined. Recalculate
-    aggregated = t_groups_sum.sum(dim='time', keep_attrs=True)
+    aggregated = t_groups_sum.sum(dim='time', keep_attrs=True, skipna=True)
     aggregated['average_flash_area'] = (aggregated.total_flash_area
                                         / aggregated.flash_extent_density)
     aggregated['average_group_area'] = (aggregated.total_group_area
