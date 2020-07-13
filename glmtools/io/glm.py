@@ -175,9 +175,12 @@ class GLMDataset(OneToManyTraversal):
                 1 : first revision, lowering equatorial height to 14 km.
 
             check_area_units: If True (default) check the units on flash
-                and group area and convert to km^2 if in m^2.
+                and group area and convert to km^2 if in m^2. Also fix any
+                areas that exceed the max allowed (10000 km^2) in early
+                LCFA files by changing them from unknown to the max.
             change_energy_units: If True (default) change the units of flash,
-                group, and event energy to nJ.
+                group, and event energy to nJ. Also look for any events with
+                zero energy and set them to a small non-zero value.
             fix_bad_DO07_times: If True (default), correct for the missing
                 _Unsigned attribute for the ~month in Oct-Nov 2018 when the
                 problem was present.
@@ -214,8 +217,14 @@ class GLMDataset(OneToManyTraversal):
         if fix_bad_DO07_times:
             did_fix = self._check_and_fix_missing_unsigned_time(filename)
         if check_area_units:
+            # Check for missing areas (from overflow of the max value
+            # allowed by the scale_factor) before ensuring units are always km^2
+            did_fix = self._check_area_overflow()
             did_fix = self._check_area_units()
         if change_energy_units:
+            # Change zero-energy events to a small non-zero value before
+            # changing units.
+            did_fix = self._eliminate_zero_energy()
             did_fix = self._change_energy_units()
 
     def __init_parent_child_data(self):
@@ -298,6 +307,53 @@ class GLMDataset(OneToManyTraversal):
         else:
             raise ValueError("Event energy units have changed from PUG v.2.0")
         return changed_flash_energy, changed_group_energy, changed_event_energy
+
+    def _eliminate_zero_energy(self, fraction_of_min=0.5):
+        """ Some events included in the dataset have zero energy even though
+        they are reported as valid events. Presumably this is because their
+        energy was greater than zero but less than the smallest discretized
+        value given by the offset and scale factors. This function sets these
+        events' energy to a nonzero value that is the minimum discretized value
+        multiplied by fraction_of_min.
+        """
+        min_discr_energy = (self.dataset.event_energy.encoding['add_offset'] +
+                            self.dataset.event_energy.encoding['scale_factor'])
+        min_energy = fraction_of_min*min_discr_energy
+        zero_energy = (self.dataset.event_energy < min_discr_energy)
+        if zero_energy.any():
+            log.debug("Setting zero-energy events to {0}".format(min_energy))
+            self.dataset.event_energy[zero_energy] = min_energy
+            fixed_zero_energy = True
+        else:
+            fixed_zero_energy = False
+
+    def _check_area_overflow(self):
+        """Look for flash areas that have _FillValue, which means that they were
+        larger than the allowed value defined by scale_factor and add_offset.
+
+        We set the value to one in excess of valid_range in the original L2 LCFA
+        dataset, but that's ok because the output NetCDF from this code here
+        uses a different (larger) scaling of 1.0 km to accomodate these larger
+        areas.
+        """
+        max_fl_area = (self.dataset.flash_area.encoding['add_offset'] +
+                       self.dataset.flash_area.encoding['scale_factor'] *
+                       self.dataset.flash_area.encoding['_FillValue'])
+        max_gr_area = (self.dataset.group_area.encoding['add_offset'] +
+                       self.dataset.group_area.encoding['scale_factor'] *
+                       self.dataset.group_area.encoding['_FillValue'])
+        overflow_gr_areas = np.isnan(self.dataset.group_area)
+        overflow_fl_areas = np.isnan(self.dataset.flash_area)
+        fixed_fl_area, fixed_gr_area = False, False
+        if overflow_gr_areas.any():
+            log.debug("Setting overflow group areas to the maximum value {0}".format(max_gr_area))
+            self.dataset.group_area[overflow_gr_areas] = max_gr_area
+            fixed_gr_area = True
+        if overflow_fl_areas.any():
+            log.debug("Setting overflow flash areas to the maximum value {0}".format(max_fl_area))
+            self.dataset.flash_area[overflow_fl_areas] = max_fl_area
+            fixed_fl_area = True
+        return fixed_fl_area, fixed_gr_area
 
     def _check_area_units(self):
         fixed_flash_area, fixed_group_area = False, False
