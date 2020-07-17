@@ -27,6 +27,13 @@ glmtools can restore the GLM event geometry using a built-in corner-point lookup
 which allows for gridding of the imagery at finer resolutions that accurately represent
 the full footprint of each event, group, and flash.
 
+The methods are described in Bruning et al. (2019):
+
+-  Bruning, E., Tillier, C. E., Edgington, S. F., Rudlosky, S. D.,
+Zajic, J., Gravelle, C., et al. (2019). Meteorological imagery for
+the Geostationary Lightning Mapper. Journal of Geophysical Research:
+Atmospheres, 2019; 124: 14285 14309. https://doi.org/10.1029/2019JD030874
+
 ## Some common tasks
 
 ### Create gridded NetCDF imagery
