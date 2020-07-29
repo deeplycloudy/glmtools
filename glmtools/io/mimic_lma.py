@@ -16,7 +16,6 @@ from glmtools.grid.clipping import QuadMeshPolySlicer, join_polys
 from glmtools.io.ccd import load_pixel_corner_lookup, quads_from_corner_lookup
 from lmatools.io.LMA_h5_file import LMAh5Collection
 from lmatools.lasso.cell_lasso_timeseries import TimeSeriesGenericFlashSubset
-from lmatools.lasso.energy_stats import TimeSeriesPolygonLassoFilter
 from lmatools.grid.fixed import get_GOESR_coordsys
 
 # from lmatools.io.LMA_h5_file import LMAh5Collection
@@ -155,22 +154,7 @@ def fast_fixed_grid_read_chunk(flash_data, target=None, base_date=None, nadir_lo
         corner point look up table.
     """
     flash_data = get_lutevents(flash_data)
-    geofixcs, grs80lla = get_GOESR_coordsys(sat_lon_nadir=nadir_lon)
-
-    # Calculate the longitude and latitude of the flash and group centroids on
-    # the zero-altitude ellipsoid, removing the lightning ellipse.
-    flash_lon_noellps, flash_lat_noellps, flash_alt_noellps = grs80lla.fromECEF(
-            *geofixcs.toECEF(flash_data.flash_x.data,
-                             flash_data.flash_y.data,
-                             np.zeros_like(flash_data.flash_x.data)))
-    group_lon_noellps, group_lat_noellps, group_alt_noellps = grs80lla.fromECEF(
-            *geofixcs.toECEF(flash_data.group_x.data,
-                             flash_data.group_y.data,
-                             np.zeros_like(flash_data.group_x.data)))
-    flash_data['flash_lon_noellps'] = flash_lon_noellps
-    flash_data['flash_lat_noellps'] = flash_lat_noellps
-    flash_data['group_lon_noellps'] = group_lon_noellps
-    flash_data['group_lat_noellps'] = group_lat_noellps
+    # geofixcs, grs80lla = get_GOESR_coordsys(sat_lon_nadir=nadir_lon)
 
     split_event_dataset=None
     split_group_dataset=None
@@ -185,11 +169,20 @@ def fast_fixed_grid_read_chunk(flash_data, target=None, base_date=None, nadir_lo
     x_lut = x_lut * 1.0e-6
     y_lut = y_lut * 1.0e-6
     corner_lut = corner_lut*1e-6
+    log.debug("event x y ranges")
+    log.debug(str((event_x.data.min(),event_x.data.max())))
+    log.debug(str((event_y.data.min(),event_y.data.max())))
+    log.debug("lut x y ranges")
+    log.debug(str((x_lut.min(),x_lut.max())))
+    log.debug(str((y_lut.min(),y_lut.max())))
     event_polys = quads_from_corner_lookup(x_lut, y_lut, corner_lut,
         event_x, event_y)
     # event_polys_inflated = event_polys
     # event_polys_inflated = quads_from_corner_lookup(x_lut, y_lut,
     #     corner_lut, event_x, event_y, inflate=1.02)
+    log.debug("event polys ranges")
+    log.debug(str((event_polys[:,:,0].min(),event_polys[:,:,0].max())))
+    log.debug(str((event_polys[:,:,1].min(),event_polys[:,:,1].max())))
 
     slicer = QuadMeshPolySlicer(mesh)
     # --- Split up the events ---
@@ -212,12 +205,6 @@ def fast_fixed_grid_read_chunk(flash_data, target=None, base_date=None, nadir_lo
     fixed_x_ctr = split_event_dataset['split_event_x'].data
     fixed_y_ctr = split_event_dataset['split_event_y'].data
     fixed_z_ctr = np.zeros_like(fixed_x_ctr)
-    split_event_lon, split_event_lat, split_event_alt = grs80lla.fromECEF(
-        *geofixcs.toECEF(fixed_x_ctr, fixed_y_ctr, fixed_z_ctr))
-    split_dims = getattr(split_event_dataset,
-        'split_event_parent_event_id').dims
-    split_event_dataset['split_event_lon'] = (split_dims, split_event_lon)
-    split_event_dataset['split_event_lat'] = (split_dims, split_event_lat)
 
     log.info("Calculated split event properties")
     split_event_dataset = replicate_and_weight_split_child_dataset_new(
@@ -253,20 +240,22 @@ def fast_fixed_grid_read_chunk(flash_data, target=None, base_date=None, nadir_lo
             return fake_lma
     except KeyError as ke:
         err_txt = 'Skipping {0}\n    ... assuming a flash, group, or event with id {1} does not exist'
-        log.error(err_txt.format(glm.dataset.dataset_name, ke))
+        log.error(err_txt.format(flash_data.dataset_name, ke))
 
 
 def replicate_and_weight_split_child_dataset_new(parent_data, split_child_dataset,
         parent_id='lutevent_id', split_child_parent_id='split_event_parent_event_id',
         names=['lutevent_id', 'lutevent_energy', 'lutevent_time_offset',
                'lutevent_count', 'lutevent_flash_count', 'lutevent_group_count',
-               'lutevent_total_flash_area', 'lutevent_total_group_area'],
+               'lutevent_total_flash_area', 'lutevent_total_group_area',
+               'lutevent_min_flash_area'],
         weights={'lutevent_energy':'split_event_area_fraction',
                  'lutevent_count': 'split_event_mesh_area_fraction',
                  'lutevent_flash_count': 'split_event_mesh_area_fraction',
                  'lutevent_group_count': 'split_event_mesh_area_fraction',
                  'lutevent_total_flash_area':'split_event_mesh_area_fraction',
                  'lutevent_total_group_area':'split_event_mesh_area_fraction',
+                 # 'lutevent_min_flash_area':'split_event_mesh_area_fraction',
                 }
         ):
     """
@@ -599,22 +588,24 @@ def sec_since_basedate(t64, basedate):
     return t
 
 
-# These are the dtypes in the LMA HDF5 data files
+# These are adapted from the dtypes in the LMA HDF5 data files
 event_dtype=[('flash_id', '<i4'),
              ('alt', '<f4'),
-#                  ('charge', 'i1'), ('chi2', '<f4'), ('mask', 'S4'), ('stations', 'u1'),
              ('lat', '<f4'), ('lon', '<f4'), ('time', '<f8'),
              ('mesh_frac', '<f8'),
              ('mesh_xi', '<i4'), ('mesh_yi', '<i4'),
              ('power', '<f4'), ]
 flash_dtype=[('area', '<f4'),  ('total_energy', '<f4'),
-             #('volume', '<f4'),
              ('specific_energy', '<f4'),
              ('ctr_lat', '<f4'), ('ctr_lon', '<f4'),
              ('ctr_alt', '<f4'),
              ('start', '<f8'), ('duration', '<f4'),
              ('init_lat', '<f4'), ('init_lon', '<f4'),
              ('init_alt', '<f4'),# ('init_pts', 'S256'),
+             ('flash_id', '<i4'),  ('n_points', '<i2'),  ]
+flash_dtype_fixedgridlut=[('area', '<f4'),  ('total_energy', '<f4'),
+             ('start', '<f8'), ('duration', '<f4'),
+             ('ctr_x', '<f4'), ('ctr_y', '<f4'), ('ctr_z', '<f4'),
              ('flash_id', '<i4'),  ('n_points', '<i2'),  ]
 
 def _fake_lma_from_glm_flashes(flash_data, basedate,
@@ -816,8 +807,8 @@ def _fake_lma_from_glm_events(flash_data, basedate,
 
 def _fake_lma_events_from_split_glm_lutevents(split_events, basedate):
     lut_split_event_dtype=[('flash_id', '<i4'),
-                 ('alt', '<f4'),
-                 ('lat', '<f4'), ('lon', '<f4'), ('time', '<f8'),
+                 ('x', '<f4'), ('y', '<f4'),
+                 ('time', '<f8'),
                  ('mesh_frac', '<f8'),
                  ('mesh_xi', '<i4'), ('mesh_yi', '<i4'),
                  ('power', '<f4'),
@@ -826,50 +817,89 @@ def _fake_lma_events_from_split_glm_lutevents(split_events, basedate):
                  ('lutevent_group_count', 'f4'),
                  ('lutevent_total_flash_area', 'f4'),
                  ('lutevent_total_group_area', 'f4'),
+                 ('lutevent_min_flash_area', 'f4'),
                  ]
 
-    event_np = np.empty_like(split_events.split_event_lon.data,
+    split_events['split_event_mesh_area_fraction'] = np.fabs(
+            split_events.split_event_mesh_area_fraction)
+
+    # In the case of overlapping events (due to a larger than jitter excursion)
+    # there will be multiple split events at each target grid cell. This is
+    # fine when accumulating, but when we want the minimum value on the target
+    # grid we need to pick that single value. Therefore, we group by target
+    # grid location and find the minimum
+    xi_max = split_events.split_event_mesh_x_idx.data.max()
+    xyidx = (split_events.split_event_mesh_y_idx * (xi_max+1) +
+                split_events.split_event_mesh_x_idx)
+    split_events['xyidx'] = xyidx
+
+
+    # Grab just the variables needed for the calculations.
+    # Also convert to a dataframe to use the pandas groupby, which is
+    # substantially faster than the xarray groupby, per
+    # https://github.com/pydata/xarray/issues/659
+    mean_data_in = split_events[['split_event_x',
+                                 'split_event_y',
+                                 'xyidx'
+                               ]].to_dataframe()
+    sum_data_in = split_events[['split_lutevent_energy',
+                           'split_event_mesh_area_fraction',
+                           'split_lutevent_count',
+                           'split_lutevent_group_count',
+                           'split_lutevent_flash_count',
+                           'split_lutevent_total_flash_area',
+                           'split_lutevent_total_group_area',
+                           'xyidx'
+                         ]].to_dataframe()
+    min_data_in = split_events[['split_event_parent_event_id',
+                                'split_lutevent_time_offset',
+                                'split_event_mesh_x_idx',
+                                'split_event_mesh_y_idx',
+                                'split_lutevent_min_flash_area',
+                                'xyidx'
+                                ]].to_dataframe()
+
+    min_data = min_data_in.groupby('xyidx').min()
+    mean_data = mean_data_in.groupby('xyidx').mean()
+    sum_data = sum_data_in.groupby('xyidx').sum()
+    event_np = np.empty_like(mean_data.split_event_x,
         dtype=lut_split_event_dtype)
 
     if event_np.shape[0] == 0:
         # no data, nothing to do
         return event_np
 
-    event_np['flash_id'] = split_events.split_event_parent_event_id.data
-    event_np['lat'] = split_events.split_event_lat
-    event_np['lon'] = split_events.split_event_lon
-    event_np['alt'] = 0.0
-    t_event = sec_since_basedate(split_events.split_lutevent_time_offset.data, basedate)
+    event_np['flash_id'] = min_data.split_event_parent_event_id
+    event_np['x'] = mean_data.split_event_x
+    event_np['y'] = mean_data.split_event_y
+    t_event = sec_since_basedate(min_data.split_lutevent_time_offset, basedate)
     event_np['time'] = t_event
-    event_np['power'] = split_events.split_lutevent_energy.data
-    event_np['mesh_frac'] = np.abs(split_events.split_event_mesh_area_fraction.data)
-    event_np['mesh_xi'] = split_events.split_event_mesh_x_idx.data
-    event_np['mesh_yi'] = split_events.split_event_mesh_y_idx.data
-    event_np['lutevent_count'] = split_events.split_lutevent_count.data
-    event_np['lutevent_flash_count'] = split_events.split_lutevent_flash_count.data
-    event_np['lutevent_group_count'] = split_events.split_lutevent_group_count.data
-    event_np['lutevent_total_flash_area'] = split_events.split_lutevent_total_flash_area.data
-    event_np['lutevent_total_group_area'] = split_events.split_lutevent_total_group_area.data
+    event_np['power'] = sum_data.split_lutevent_energy
+    event_np['mesh_frac'] = sum_data.split_event_mesh_area_fraction
+    event_np['mesh_xi'] = min_data.split_event_mesh_x_idx
+    event_np['mesh_yi'] = min_data.split_event_mesh_y_idx
+    event_np['lutevent_count'] = sum_data.split_lutevent_count
+    event_np['lutevent_flash_count'] = sum_data.split_lutevent_flash_count
+    event_np['lutevent_group_count'] = sum_data.split_lutevent_group_count
+    event_np['lutevent_total_flash_area'] = sum_data.split_lutevent_total_flash_area
+    event_np['lutevent_total_group_area'] = sum_data.split_lutevent_total_group_area
+    event_np['lutevent_min_flash_area'] = min_data.split_lutevent_min_flash_area
 
     return event_np
 
 
 def _fake_lma_from_glm_lutflashes(flash_data, basedate):
-    flash_np = np.empty_like(flash_data.flash_id.data, dtype=flash_dtype)
+    flash_np = np.empty_like(flash_data.flash_id.data,
+    dtype=flash_dtype_fixedgridlut)
 
     if flash_np.shape[0] == 0:
         # no data, nothing to do
         return flash_np
 
-    flash_lon_noellps = flash_data.flash_lon_noellps.data
-    flash_lat_noellps = flash_data.flash_lat_noellps.data
-
     flash_np['area'] = flash_data.flash_area.data
     flash_np['total_energy'] = flash_data.flash_energy.data
-    flash_np['ctr_lon'] = flash_lon_noellps
-    flash_np['ctr_lat'] = flash_lat_noellps
-    flash_np['init_lon'] = flash_lon_noellps
-    flash_np['init_lat'] = flash_lat_noellps
+    flash_np['ctr_x'] = flash_data.flash_x.data
+    flash_np['ctr_y'] = flash_data.flash_y.data
     t_start = sec_since_basedate(flash_data.flash_time_offset_of_first_event.data, basedate)
     t_end = sec_since_basedate(flash_data.flash_time_offset_of_last_event.data, basedate)
     flash_np['start'] = t_start
@@ -878,30 +908,21 @@ def _fake_lma_from_glm_lutflashes(flash_data, basedate):
     flash_np['n_points'] = flash_data.number_of_events.shape[0]
 
     # Fake the altitude data
-    flash_np['ctr_alt'] = 0.0
-    flash_np['init_alt'] = 0.0
-
-    # Fake the specific energy data
-    flash_np['specific_energy'] = 0.0
+    flash_np['ctr_z'] = 0.0
 
     return flash_np
 
 def _fake_lma_from_glm_lutgroups(flash_data, basedate):
-    flash_np = np.empty_like(flash_data.group_id.data, dtype=flash_dtype)
+    flash_np = np.empty_like(flash_data.group_id.data, dtype=flash_dtype_fixedgridlut)
 
     if flash_np.shape[0] == 0:
         # no data, nothing to do
         return flash_np
 
-    group_lon_noellps = flash_data.group_lon_noellps.data
-    group_lat_noellps = flash_data.group_lat_noellps.data
-
     flash_np['area'] = flash_data.group_area.data
     flash_np['total_energy'] = flash_data.group_energy.data
-    flash_np['ctr_lon'] = group_lon_noellps
-    flash_np['ctr_lat'] = group_lat_noellps
-    flash_np['init_lon'] = group_lon_noellps
-    flash_np['init_lat'] = group_lat_noellps
+    flash_np['ctr_x'] = flash_data.group_x.data
+    flash_np['ctr_y'] = flash_data.group_y.data
     t_start = sec_since_basedate(flash_data.group_time_offset.data, basedate)
     t_end = sec_since_basedate(flash_data.group_time_offset.data, basedate)
     flash_np['start'] = t_start
@@ -910,11 +931,7 @@ def _fake_lma_from_glm_lutgroups(flash_data, basedate):
     flash_np['n_points'] = flash_data.number_of_events.shape[0]
 
     # Fake the altitude data
-    flash_np['ctr_alt'] = 0.0
-    flash_np['init_alt'] = 0.0
-
-    # Fake the specific energy data
-    flash_np['specific_energy'] = 0.0
+    flash_np['ctr_z'] = 0.0
 
     return flash_np
 
@@ -1033,7 +1050,7 @@ class GLMncCollection(LMAh5Collection):
                                 lat_range=self.lat_range,
                                 clip_events=False)
         ev_chunks = (d['flash'][0] for d in fake_lma)
-        fl_chunks = (d['flash'][0] for d in fake_lma)
+        fl_chunks = (d['flash'][1] for d in fake_lma)
         events, flashes = np.hstack(ev_chunks), np.hstack(fl_chunks)
         log.info('data from {0}'.format(fname))
         return events, flashes
@@ -1062,6 +1079,8 @@ class TimeSeriesGLMPolygonFlashSubset(TimeSeriesGLMFlashSubset):
 
         super(TimeSeriesGLMPolygonFlashSubset, self).__init__(*args, **kwargs)
 
+        # Put a fence around possible lmatools imports (like matplotlib)
+        from lmatools.lasso.energy_stats import TimeSeriesPolygonLassoFilter
         # strictly speaking, we don't even need the time series part; that's been done
         # and we're just lassoin' the points.
         # But, this code is known to work, so we just reuse it here.

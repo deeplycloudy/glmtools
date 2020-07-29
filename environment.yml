@@ -6,13 +6,12 @@ dependencies:
 - hdf5
 - netcdf4
 - numpy
-- pytables
 - pandas
-- xarray
-- scikit-learn
-- scipy
-- ipython
-- matplotlib
-- pyproj
+- pip
+- pyclipper
 - python=3.6
-- six
+- scipy
+- xarray
+- pip:
+  - git+https://github.com/deeplycloudy/lmatools.git
+  - git+https://github.com/deeplycloudy/stormdrain.git

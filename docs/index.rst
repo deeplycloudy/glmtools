@@ -9,7 +9,7 @@ Documentation for glmtools
 .. toctree::
    :maxdepth: 2
    :hidden:
-   
+
    api/index
    callgraph
 
@@ -28,30 +28,21 @@ fractional pixel coverage. Doing so requires the ``pyclipper`` wrapper for the f
 `Clipper <http://www.angusj.com/delphi/clipper.php>`_ c++ library.
 
 Step by step instructions
-------------------------- 
+-------------------------
 
 The instructions below assume the Anaconda Python distribution (``miniconda`` is
 fine), and the availability of the ``conda`` package manager.
 
-Until development on ``lmatools`` stabilizes, it is recommended
-to install that package from source. From some working directory (e.g.,
-``~/sources``):
-
 .. code-block:: bash
 
-   git clone https://github.com/deeplycloudy/lmatools.git
-   git clone https://github.com/deeplycloudy/stormdrain.git
    git clone https://github.com/deeplycloudy/glmtools.git
    cd glmtools
    conda env create -f environment.yml
-   source activate glmval
-   pip install pyclipper
-   cd ../lmatools
-   python setup.py install
-   cd ../stormdrain
-   python setup.py install
-   cd ../glmtools
-   python setup.py install
+   conda activate glmval
+   pip install -e .
+
+If you want to use the example notebooks also run
+"conda install -c conda-forge ipython matplotlib"
 
 Using glmtools
 ==============
@@ -64,7 +55,7 @@ If you are using the environment created by environment.yml, this environment wi
 
 .. code-block:: bash
 
-   source activate glmval
+   conda activate glmval
 
 
 Get some GLM data, and check it for sanity
@@ -92,16 +83,18 @@ subsequent steps.
 Grid the GLM data
 -----------------
 
-The script ``examples/grid/make_GLM_grids.py`` is a command line utility; run with ``--help`` for usage. 
+The script ``examples/grid/make_GLM_grids.py`` is a command line utility; run with ``--help`` for usage.
 
 For instance, the following command, using the included sample data will grid
 one minute of data (3 GLM files) on the ABI fixed grid in the CONUS sector at 2
 km resolution. These images will overlay precisely on the ABI cloud tops, and
 will have parallax with respect to ground for all the same reasons ABI does.
+Output will be placed in the current directory in a new 2018/Jul/02 directory
+created by default.
 
 .. code-block:: bash
 
-    python make_GLM_grids.py -o /path/to/output/ 
+    python make_GLM_grids.py
     --fixed_grid --split_events \
     --goes_position east --goes_sector conus \
     --dx=2.0 --dy=2.0 \
@@ -114,7 +107,7 @@ If you don't need the whole conus sector, you can instead plot on a mesoscale do
 
 .. code-block:: bash
 
-    python make_GLM_grids.py -o /path/to/output/
+    python make_GLM_grids.py
     --fixed_grid --split_events \
     --goes_position east --goes_sector meso \
     --dx=2.0 --dy=2.0 \
@@ -122,12 +115,12 @@ If you don't need the whole conus sector, you can instead plot on a mesoscale do
     OR_GLM-L2-LCFA_G16_s20181830433000_e20181830433200_c20181830433231.nc \
     OR_GLM-L2-LCFA_G16_s20181830433200_e20181830433400_c20181830433424.nc \
     OR_GLM-L2-LCFA_G16_s20181830433400_e20181830434000_c20181830434029.nc \
-    
+
 Finally, if you want a fully custom grid size, you can omit the ``--goes_sector`` argument and specify a width and height in kilometers.
 
 .. code-block:: bash
 
-    python make_GLM_grids.py -o /path/to/output/
+    python make_GLM_grids.py
     --fixed_grid --split_events \
     --goes_position east \
     --dx=2.0 --dy=2.0 --width="1000.0" --height="500.0" \
@@ -139,8 +132,8 @@ Finally, if you want a fully custom grid size, you can omit the ``--goes_sector`
 
 The notebook ``examples/plot_glm_test_data.ipynb`` runs the meso sector example in a temporary directory, and also shows how to plot the resulting grids on a map. In the examples above, the start and end time of the grids was inferred from the filenames, but the notebook also shows how to grid 1 min of data to a file containing 5, 1-min frames, all but one of which will be empty.
 
-Calculate time series flash rate data 
-------------------------------------- 
+Calculate time series flash rate data
+-------------------------------------
 
 The script ``examples/glm-lasso-stats.py`` is a command line utility; run with
 --help for usage. There is an equivalent script in ``lmatools`` with very
@@ -152,7 +145,7 @@ simple rectangular bounding box is centered on the West Texas LMA and is valid f
 hours on 5 July 2017. Both the valid time and the coordinates can be edited directly to
 change to a different day or box. The first and last vertices of the bounding box (any
 polygon is valid) must be repeated to close the polygon.
- 
+
 Suggestions for automating
 --------------------------
 
@@ -161,14 +154,14 @@ pieces into a large parameter space study, applied to both GLM and LMA data on
 the same grid and for the same bounding box.
 
 To run the script, it is recommended to copy it and your bounding box file
-to an analysis directory. Then, edit the export lines at the beginning of 
+to an analysis directory. Then, edit the export lines at the beginning of
 the script to point your files, dates, times, grid specification, etc.
 Output from the script is saved to the ``GLMSORTGRID`` and ``LMASORTGRID``
 directories you have specified.
 
 A wealth of time series statstics will be calculated, and saved to .csv files.
 Of particular interest are:
- 
+
 - ``flash_stats.csv``
 - ``grids_flash_extent/flash_extent_{date}.csv``
 
