@@ -504,7 +504,7 @@ class GLMDataset(OneToManyTraversal):
             # log.debug("Subsetting bad events with override ranges {0}".format(
                 # check_event_kw))
             good_event_flash_ids = self._check_event_xy(**check_event_kw)
-        flash_ids = list(set(flash_ids) and set(good_event_flash_ids))
+        flash_ids = list(set(flash_ids) & set(good_event_flash_ids))
         return self.get_flashes(flash_ids)
 
     def get_flashes(self, flash_ids):
