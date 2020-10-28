@@ -34,24 +34,24 @@ def create_parser():
                         dest='ctr_lon', action='store', type=float,
                         help='center longitude')
     parser.add_argument('--start', metavar='yyyy-mm-ddThh:mm:ss',
-                        dest='start', action='store', 
+                        dest='start', action='store',
                         help='UTC start time, e.g., 2017-07-04T08:00:00')
     parser.add_argument('--end', metavar='yyyy-mm-ddThh:mm:ss',
-                        dest='end', action='store', 
+                        dest='end', action='store',
                         help='UTC end time, e.g., 2017-07-04T09:00:00')
-    parser.add_argument('--dx', metavar='km', 
+    parser.add_argument('--dx', metavar='km',
                         dest='dx', action='store', default=10.0, type=float,
                         help='approximate east-west grid spacing')
-    parser.add_argument('--dy', metavar='km', 
+    parser.add_argument('--dy', metavar='km',
                         dest='dy', action='store', default=10.0, type=float,
                         help='approximate north-south grid spacing')
-    parser.add_argument('--dt', metavar='seconds', 
+    parser.add_argument('--dt', metavar='seconds',
                         dest='dt', action='store', default=60.0, type=float,
                         help='frame duration')
-    parser.add_argument('--width', metavar='distance in km', 
+    parser.add_argument('--width', metavar='distance in km',
                         dest='width', action='store', default=400.0,
                         type=float, help='total width of the grid')
-    parser.add_argument('--height', metavar='distance in km', 
+    parser.add_argument('--height', metavar='distance in km',
                         dest='height', action='store', default=400.0,
                         type=float, help='total height of the grid')
     parser.add_argument('--nevents', metavar='minimum events per flash',
@@ -81,10 +81,10 @@ def create_parser():
                               "Omit if you are creating a fully custom grid "
                               "with --width and --height arguments."))
     parser.add_argument('--corner_points', metavar='filename.pickle',
-                        action='store', dest='corner_points', 
+                        action='store', dest='corner_points',
                         help=("name of file containing a pickled "
                               "corner point lookup table"))
-    parser.add_argument('--split_events', dest='split_events', 
+    parser.add_argument('--split_events', dest='split_events',
                         action='store_true',
                         help='Split GLM event polygons when gridding')
     parser.add_argument('--ellipse', dest='ellipse_rev', default=-1,
@@ -94,15 +94,15 @@ def create_parser():
                              ' 1=late 2018 revision')
     parser.add_argument('--float_output', dest='output_scale_and_offset',
                         default=True,
-                        action='store_false', 
+                        action='store_false',
                         help='write all output variables as floating point')
-    parser.add_argument('--lma', dest='is_lma', 
-                        action='store_true', 
+    parser.add_argument('--lma', dest='is_lma',
+                        action='store_true',
                         help='grid LMA h5 files instead of GLM data')
     # parser.add_argument('-v', dest='verbose', action='store_true',
                         # help='verbose mode')
     return parser
-    
+
 ##### END PARSING #####
 
 import numpy as np
@@ -153,7 +153,7 @@ def grid_setup(args):
     from lmatools.io.LMA_h5_file import parse_lma_h5_filename
     from lmatools.grid.fixed import get_GOESR_grid, get_GOESR_coordsys
 
-    # When passed None for the minimum event or group counts, the gridder will skip 
+    # When passed None for the minimum event or group counts, the gridder will skip
     # the check, saving a bit of time.
     min_events = int(args.min_events)
     if min_events <= 1:
@@ -170,7 +170,7 @@ def grid_setup(args):
         filename_parser = parse_glm_filename
         start_idx = 3
         end_idx = 4
-    
+
     glm_filenames = args.filenames
     base_filenames = [os.path.basename(p) for p in glm_filenames]
     try:
@@ -181,7 +181,7 @@ def grid_setup(args):
     except ValueError:
         log.error("One or more GLM files has a non-standard filename.")
         log.error("Assuming that --start and --end have been passed directly.")
-    
+
     from glmtools.io.glm import parse_glm_filename
     if args.start is not None:
         start_time = datetime.strptime(args.start[:19], '%Y-%m-%dT%H:%M:%S')
@@ -203,20 +203,20 @@ def grid_setup(args):
     date = datetime(start_time.year, start_time.month, start_time.day)
 
     outpath = args.outdir
-    
+
     if args.fixed_grid:
         proj_name = 'geos'
 
         if (args.goes_position != 'none') & (args.goes_sector != 'none'):
             resln = nearest_resolution(args)
-            view = get_GOESR_grid(position=args.goes_position, 
-                                  view=args.goes_sector, 
+            view = get_GOESR_grid(position=args.goes_position,
+                                  view=args.goes_sector,
                                   resolution=resln)
             nadir_lon = view['nadir_lon']
             dx = dy = view['resolution']
             nx, ny = view['pixelsEW'], view['pixelsNS']
             geofixcs, grs80lla = get_GOESR_coordsys(sat_lon_nadir=nadir_lon)
-            
+
             if 'centerEW' in view:
                 x_ctr, y_ctr = view['centerEW'], view['centerNS']
             elif args.goes_sector == 'meso':
@@ -226,8 +226,8 @@ def grid_setup(args):
         elif (args.goes_position != 'none') & (args.goes_sector == 'none'):
             # Requires goes_position, a center, and a width. Fully flexible
             # in resolution, i.e., doesn't slave it to one of the GOES-R specs
-            view = get_GOESR_grid(position=args.goes_position, 
-                                  view='full', 
+            view = get_GOESR_grid(position=args.goes_position,
+                                  view='full',
                                   resolution='1.0km')
             nadir_lon = view['nadir_lon']
             dx1km = dy1km = view['resolution']
@@ -255,7 +255,7 @@ def grid_setup(args):
         log.debug(("initial x,y_bnd", x_bnd.shape, y_bnd.shape))
         x_bnd = np.asarray([x_bnd.min(), x_bnd.max()])
         y_bnd = np.asarray([y_bnd.min(), y_bnd.max()])
-        
+
         geofixcs, grs80lla = get_GOESR_coordsys(sat_lon_nadir=nadir_lon)
         ctr_lon, ctr_lat, ctr_alt = grs80lla.fromECEF(
             *geofixcs.toECEF(x_ctr, y_ctr, 0.0))
@@ -274,12 +274,12 @@ def grid_setup(args):
         width, height = 1000.0*float(args.width), 1000.0*float(args.height)
         x_bnd_km = (-width/2.0, width/2.0)
         y_bnd_km = (-height/2.0, height/2.0)
-        dx, dy, x_bnd, y_bnd = dlonlat_at_grid_center(ctr_lat, ctr_lon, 
+        dx, dy, x_bnd, y_bnd = dlonlat_at_grid_center(ctr_lat, ctr_lon,
                                     dx=dx_km, dy=dy_km,
                                     x_bnd = x_bnd_km, y_bnd = y_bnd_km )
 
     # tuples of the corners
-    corners = np.vstack([(x_bnd[0], y_bnd[0]), (x_bnd[0], y_bnd[1]), 
+    corners = np.vstack([(x_bnd[0], y_bnd[0]), (x_bnd[0], y_bnd[1]),
                          (x_bnd[1], y_bnd[1]), (x_bnd[1], y_bnd[0])])
     # print(x_bnd, y_bnd)
 
@@ -293,7 +293,7 @@ def grid_setup(args):
     grid_kwargs=dict(proj_name=proj_name,
             base_date = date, do_3d=False,
             dx=dx, dy=dy, frame_interval=float(args.dt),
-            x_bnd=x_bnd, y_bnd=y_bnd, 
+            x_bnd=x_bnd, y_bnd=y_bnd,
             ctr_lat=ctr_lat, ctr_lon=ctr_lon, outpath = outpath,
             min_points_per_flash = min_events,
             output_writer = output_writer, subdivide=args.subdivide_grid,
@@ -322,7 +322,7 @@ def grid_setup(args):
 if __name__ == '__main__':
     parser = create_parser()
     args = parser.parse_args()
-    
+
     from multiprocessing import freeze_support
     freeze_support()
     gridder, glm_filenames, start_time, end_time, grid_kwargs = grid_setup(args)
