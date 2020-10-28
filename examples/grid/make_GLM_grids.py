@@ -107,7 +107,7 @@ def create_parser():
 
 import numpy as np
 import subprocess, glob
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 from functools import partial
 
@@ -190,7 +190,15 @@ def grid_setup(args):
     if args.end is not None:
         end_time = datetime.strptime(args.end[:19], '%Y-%m-%dT%H:%M:%S')
     else:
-        end_time = max(filename_ends)
+        # Used to use max(filename_ends), but on 27 Oct 2020, the filename
+        # ends started to report the time of the last event in the file,
+        # causing a slight leakage (usually less than a second) into the
+        # next minute. This caused two minutes of grids to be produced for every
+        # three twenty second files passed to this script.
+        # Instead, we now assume every LCFA file is 20 s long, beginning with
+        # the start time. No doubt in the future we will see filenames that no
+        # longer start on an even minute boundary.
+        end_time = max(filename_starts) + timedelta(0, 20)
 
     date = datetime(start_time.year, start_time.month, start_time.day)
 
