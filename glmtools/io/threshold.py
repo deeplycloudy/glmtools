@@ -74,7 +74,17 @@ def recalculate_flash_data(glm_prune, glm):
 
 
 def filter_to_energy(glm, thresh, units='nJ'):
-    """ Filter GLMDataset object to threshold thresh in units as given."""
+    """ Filter GLMDataset object to threshold thresh in units as given.
+
+    Usage:
+    threshes = (np.arange(4)+0.5)*1e-6
+    n_thresh = threshes.shape[0]
+    prune_dss = [filter_to_energy(glm, thresh) for thresh in threshes[:]]
+    for thresh, gds in zip(threshes, prune_dss):
+        print('===', thresh*1e6, 'fJ ===')
+        for k in ('number_of_events', 'number_of_groups', 'number_of_flashes'):
+            print(k, ds.dims[k])
+    """
     assert glm.dataset.event_energy.attrs['units'] == units
     above_thresh = glm.dataset.event_energy >= thresh
     # After selecting the events above threshold the remaining
