@@ -83,6 +83,18 @@ glm_scaling = {
         'scale_factor':1.0, 'add_offset':0.0},
     'total_energy':{'dtype':'uint16',
         'scale_factor':1.52597e-6, 'add_offset':0.0,},
+    # Revised (more precise) event_energy scale and offset from L2_LCFA files
+    # :scale_factor = 1.9024E-17f; // float
+    # :add_offset = 2.8515E-16f; // float
+    'minimum_event_energy':{'dtype':'uint16',
+        'scale_factor':1.9024E-11, 'add_offset':2.8515E-10,},
+    # WMO record flashes had about 55K events, so value could be as small
+    # as 1/55e3/49=3.7e-7 for 49 two km pixels per 14 km GLM source pixel.
+    # A 16 bit value would give a max of only 0.0066, so we use a 32 bit int,
+    # since the max value should probably be about 100 to accomodate high flash
+    # rate storms where the flashes are rarely more than a few pixels wide.
+    'event_flash_fraction':{'dtype':'uint32',
+        'scale_factor':1.0e-7, 'add_offset':0.0,},
 }
 
 def get_goes_imager_subpoint_vars(nadir_lon):
@@ -601,11 +613,11 @@ def aggregate(glm, minutes, start_end=None):
         start = start_end[0]
         end = start_end[1]
     else:
-        start = pd.Timestamp(glm['time'].min().data).to_pydatetime()
-        end = pd.Timestamp(glm['time'].max().data).to_pydatetime() + dt
+        # start = pd.Timestamp(glm['time'].min().data).to_pydatetime()
+        # end = pd.Timestamp(glm['time'].max().data).to_pydatetime() + dt
         # The lines below might be necessary replacements for a future version
-        # start = pd.to_datetime(glm['time'].min().data).to_pydatetime()
-        # end = pd.to_datetime(glm['time'].max().data).to_pydatetime() + dt
+        start = pd.to_datetime(glm['time'].min().data).to_pydatetime()
+        end = pd.to_datetime(glm['time'].max().data).to_pydatetime() + dt
         # dt_np = (end - start).data
         # duration = pd.to_timedelta(dt_np).to_pytimedelta()
     duration = end - start

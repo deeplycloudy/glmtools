@@ -605,6 +605,7 @@ def get_lutevents(dataset, scale_factor=28e-6, event_dim='number_of_events',
     ev_group_id = dataset.event_parent_group_id.data
     flash_area = dataset.flash_area.data
     group_area = dataset.group_area.data
+    flash_event_count = dataset.flash_child_event_count.data
 
     xy_id = discretize_2d_location(event_x, event_y, scale_factor, x_range, y_range)
     dataset['event_parent_lutevent_id'] = xr.DataArray(xy_id, dims=[event_dim,])
@@ -629,12 +630,15 @@ def get_lutevents(dataset, scale_factor=28e-6, event_dim='number_of_events',
                       ('lutevent_total_flash_area', 'f8'),
                       ('lutevent_total_group_area', 'f8'),
                       ('lutevent_time_offset', '<M8[ns]'),
-                      ('lutevent_min_flash_area', 'f8')
+                      ('lutevent_min_flash_area', 'f8'),
+                      ('lutevent_total_event_flash_fraction', 'f8'),
+                      ('lutevent_min_event_energy', 'f8'),
                       ]
 
     lut_iter = event_lut_iter(eventlut_groups, flash_id_groupby, group_id_groupby,
                    event_x, event_y, event_energy, product_time,
-                   ev_flash_id, ev_group_id, flash_area, group_area)
+                   ev_flash_id, ev_group_id, flash_area, group_area,
+                   flash_event_count)
     event_lut = np.fromiter(lut_iter, dtype=eventlut_dtype, count=n_lutevents)
     lutevents = xr.Dataset.from_dataframe(
                     pd.DataFrame(event_lut).set_index('lutevent_id'))
@@ -644,15 +648,18 @@ def get_lutevents(dataset, scale_factor=28e-6, event_dim='number_of_events',
 
 def event_lut_iter(event_lut_groupby, flash_groupby, group_groupby,
                    event_x, event_y, event_energy, product_time,
-                   ev_flash_id, ev_group_id, flash_area, group_area):
+                   ev_flash_id, ev_group_id, flash_area, group_area,
+                   flash_event_count):
     flash_groups = flash_groupby.groups
     group_groups = group_groupby.groups
     total_abs_area_delta = 0.0
     total_area = 0.0
     for xy_id, evids in event_lut_groupby.groups.items():
-        flash_ids = np.unique(ev_flash_id[evids])
+        flash_ids, local_events_this_flash = np.unique(
+            ev_flash_id[evids], return_counts=True)
         group_ids = np.unique(ev_group_id[evids])
         flash_count, group_count = len(flash_ids), len(group_ids)
+
         # old_flash_area = sum((flash_area[flash_groups[fid]].sum()
         #     for fid in flash_ids))
         replicated_flashes = list(itertools.chain.from_iterable(
@@ -669,6 +676,15 @@ def event_lut_iter(event_lut_groupby, flash_groupby, group_groupby,
         # total_abs_area_delta += np.abs(total_group_area - old_group_area)
         # total_area += total_group_area
         # print(total_abs_area_delta, total_area)
+
+        # The number of events for each flash at this xy_id location
+        # divided by the number of events in the whole flash (regardless of
+        # location) is a component of the MTG LI F_AF accumulated product. It
+        # adds +1 to the whole grid for each flash, with the grid value
+        # incremented locally by the ratio above.
+        total_flash_event_fraction = (local_events_this_flash /
+            flash_event_count[replicated_flashes]).sum()
+
         min_flash_area = min((flash_area[flash_groups[fid]].min()
             for fid in flash_ids))
         yield (xy_id,
@@ -681,7 +697,9 @@ def event_lut_iter(event_lut_groupby, flash_groupby, group_groupby,
                total_flash_area,
                total_group_area,
                product_time,
-               min_flash_area
+               min_flash_area,
+               total_flash_event_fraction,
+               event_energy[evids].min()
                )
 
 
