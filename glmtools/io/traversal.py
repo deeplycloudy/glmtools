@@ -280,3 +280,94 @@ class OneToManyTraversal(object):
                 last_entity_ids = np.unique(dataset[p_var].data)
 
         return dataset
+
+    def check_parent_child(self):
+        """ Check the parent-child tree for a self-consistent set of parent ID
+        variables at the parent level (the entity_var) and the upward-pointing
+        parent ID variable at the child level (the parent_var).
+
+        Returns:
+        entity_var_stats, parent_var_stats
+        Both are dicts giving ID variable names for the ID variables described
+        above, with values a three-tuple giving (1) the number of unique IDs
+        in that variable (2) the number of IDs that don't have a match at the
+        child or parent level (respectively, by dictionary) and (3) the actual
+        IDs that did not match, if any, as a set. If (2) is nonzero, the tree
+        is inconsistent and (3) will be a non-empty set.
+
+        Example:
+
+        for fn in glm_files:
+            ds = xr.open_dataset(fn)
+            trav = OneToManyTraversal(ds, ['flash_id', 'group_id', 'event_id'],
+                        ['group_parent_flash_id', 'event_parent_group_id'])
+            entity_var_stats, parent_var_stats = trav.check_parent_child()
+
+            print(fn)
+            for entity_var, (entity_count, lying_parent_count, bad_entity_ids) \
+                    in entity_var_stats.items()):
+                print(entity_var, " unique count, count without children ",
+                        entity_count, lying_parent_count)
+            for parent_var, (child_count, orphan_child_count, bad_parent_ids) \
+                    in parent_var_stats.items():
+                print(parent_var, "unique count, count with no parent ",
+                        child_count, orphan_child_count)
+        """
+
+        trav = self
+        entity_var_stats = {}
+        parent_var_stats = {}
+        for (entity_var, parent_var) in trav._descend():
+            if parent_var is None:
+                # At the top of the hierarchy
+                id_entity_for_parent_var = entity_var
+                continue
+            # e.g., group_id, group_parent_flash_id
+            # print(entity_var, parent_var)
+            # e.g., flash_id
+            # print(id_entity_for_parent_var)
+            # e.g., group_id
+            # entity_grouper = trav.entity_groups_by_parent[parent_var]
+
+            # e.g., group_parent_flash_id
+            # Check the entity ID variable and its corresponding parent data for the same set of IDs
+            parent_grouper = trav.parent_groups[parent_var]
+            parent_ids = set(parent_grouper.groups.keys())
+
+            # e.g., flash_id
+            parent_entity_grouper = trav.entity_groups[id_entity_for_parent_var]
+            parent_entity_ids = set(parent_entity_grouper.groups.keys())
+
+            # Ensure no replication of IDs at the parent level. There should
+            # only be on entity ID for each entity.
+            # assert len(parent_entity_ids) == len(
+            #    parent_entity_grouper.groups.keys())
+
+            # Make sure that the set of parent_ids and parent_entity_ids are identical
+            common_ids = parent_entity_ids & parent_ids
+            parent_entity_ids_with_no_child = parent_entity_ids - common_ids
+            parent_ids_with_no_parent = parent_ids - common_ids
+
+            lying_parent_count = len(parent_entity_ids_with_no_child)
+            orphan_child_count = len(parent_ids_with_no_parent)
+
+            entity_var_stats[id_entity_for_parent_var] = (
+                len(parent_entity_ids), lying_parent_count,
+                parent_entity_ids_with_no_child)
+            parent_var_stats[parent_var] = (len(parent_ids),
+                orphan_child_count, parent_ids_with_no_parent)
+
+            # if orphan_child_count > 0:
+            #     # remove children at the entity_id (e.g., group_id) level
+            #     # that don't have a parent
+            #     pass
+            #
+            # if lying_parent_count > 0:
+            #     # remove parents that don't have children.
+            #     pass
+
+            # Retain info about the ID var from this level for when we descend
+            # then next time through the loop
+            id_entity_for_parent_var = entity_var
+
+        return entity_var_stats, parent_var_stats

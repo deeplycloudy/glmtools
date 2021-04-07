@@ -152,7 +152,7 @@ def event_areas(flash_data):
 class GLMDataset(OneToManyTraversal):
     def __init__(self, filename, calculate_parent_child=True, ellipse_rev=-1,
                  check_area_units=True, change_energy_units=True,
-                 fix_bad_DO07_times=True):
+                 fix_bad_DO07_times=True, check_tree=True):
         """ filename is any data source which works with xarray.open_dataset
 
             By default, helpful additional parent-child data are calculated,
@@ -194,6 +194,28 @@ class GLMDataset(OneToManyTraversal):
                              self.entity_ids, self.parent_ids)
         else:
             dataset = xr.open_dataset(filename)
+
+        if check_tree:
+            tree_problems = False
+            test_trav = OneToManyTraversal(dataset,
+                            self.entity_ids, self.parent_ids)
+            entity_var_stats, parent_var_stats = test_trav.check_parent_child()
+            for entity_var, entity_stats in entity_var_stats.items():
+                entity_count, lying_parent_count, bad_entity_ids = entity_stats
+                if lying_parent_count > 0: tree_problems = True
+            for parent_var, parent_stats in parent_var_stats.items():
+                child_count, orphan_child_count, bad_parent_ids = parent_stats
+                if orphan_child_count > 0: tree_problems = True
+            if tree_problems:
+                # Make a self consistent tree by pruning the tree to just the
+                # valid flash IDs, which has the side effect of making
+                # everything else self-consistent.
+                flashes_with_no_groups = entity_var_stats['flash_id'][2]
+                unq_fl_id = set(list(dataset.group_parent_flash_id.data))
+                good_fl_id = list(unq_fl_id - flashes_with_no_groups)
+                ds_fixed = test_trav.reduce_to_entities('flash_id', good_fl_id)
+                dataset = ds_fixed
+
         self._filename = filename
         self.ellipse_rev = ellipse_rev
 
