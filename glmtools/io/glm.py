@@ -210,6 +210,8 @@ class GLMDataset(OneToManyTraversal):
                 # Make a self consistent tree by pruning the tree to just the
                 # valid flash IDs, which has the side effect of making
                 # everything else self-consistent.
+                log.warning('Fixing inconsistent parent-child IDs '
+                            'in file {0}'.format(filename))
                 flashes_with_no_groups = entity_var_stats['flash_id'][2]
                 unq_fl_id = set(list(dataset.group_parent_flash_id.data))
                 good_fl_id = list(unq_fl_id - flashes_with_no_groups)
