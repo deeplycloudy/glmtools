@@ -195,7 +195,7 @@ class GLMDataset(OneToManyTraversal):
         else:
             dataset = xr.open_dataset(filename)
 
-        if check_tree:
+        if (check_tree and (dataset.dims['number_of_flashes'] > 0)):
             tree_problems = False
             test_trav = OneToManyTraversal(dataset,
                             self.entity_ids, self.parent_ids)
