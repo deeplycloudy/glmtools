@@ -654,31 +654,42 @@ def aggregate(glm, minutes, start_end=None, rolling=False):
     min_data = glm[min_vars]
     print("got min data")
 
-
-    sum_data['total_flash_area'] = glm.average_flash_area*glm.flash_extent_density
-    sum_data['total_group_area'] = glm.average_flash_area*glm.flash_extent_density
+    if ('average_flash_area' in glm) & ('flash_extent_density' in glm):
+        sum_data['total_flash_area'] = glm.average_flash_area*glm.flash_extent_density
+    if ('average_group_area' in glm) & ('group_extent_density' in glm):
+        sum_data['total_group_area'] = glm.average_group_area*glm.group_extent_density
     print("got totals")
 
     if rolling:
         # Calculate the number of times over which to aggregate. Convert minutes
         orig_interval = np.diff(glm['time']).mean()
         n_agg = int(pd.to_timedelta(dt)/orig_interval)
-        t_groups_sum = sum_data.rolling({'time':n_agg}, min_periods=1)
-        t_groups_min = min_data.rolling({'time':n_agg}, min_periods=1)
+        # Manually construct window to work around this bug
+        #   https://github.com/pydata/xarray/issues/3165#issuecomment-516193739
+        t_groups_sum = sum_data.rolling({'time':n_agg}, min_periods=1).construct('window')
+        t_groups_min = min_data.rolling({'time':n_agg}, min_periods=1).construct('window')
     else:
         t_bins = [start + dt*i for i in range(int(duration/dt)+1)]
         t_groups_sum = sum_data.groupby_bins('time', bins=t_bins)
         t_groups_min = min_data.groupby_bins('time', bins=t_bins)
     print("did rolling or groupby setup")
-    aggregated_min = t_groups_min.min(dim='time', keep_attrs=True, skipna=True)
+    if rolling:
+        aggregated_min = t_groups_min.min(dim='window', keep_attrs=True, skipna=True)
+    else:
+        aggregated_min = t_groups_min.min(dim='time', keep_attrs=True, skipna=True)
     print("did min")
     # Naively sum all variables … so average areas are now ill defined. Recalculate
-    aggregated = t_groups_sum.sum(dim='time', keep_attrs=True, skipna=True)
+    if rolling:
+        aggregated = t_groups_sum.sum(dim='window', keep_attrs=True, skipna=True)
+    else:
+        aggregated = t_groups_sum.sum(dim='time', keep_attrs=True, skipna=True)
     print("did sum")
-    aggregated['average_flash_area'] = (aggregated.total_flash_area
-                                        / aggregated.flash_extent_density)
-    aggregated['average_group_area'] = (aggregated.total_group_area
-                                        / aggregated.group_extent_density)
+    if ('average_flash_area' in glm) & ('flash_extent_density' in glm):
+        aggregated['average_flash_area'] = (aggregated.total_flash_area
+                                            / aggregated.flash_extent_density)
+    if ('average_group_area' in glm) & ('group_extent_density' in glm):
+        aggregated['average_group_area'] = (aggregated.total_group_area
+                                            / aggregated.group_extent_density)
     for var in min_vars:
         aggregated[var] = aggregated_min[var]
 
@@ -688,8 +699,10 @@ def aggregate(glm, minutes, start_end=None, rolling=False):
     # Someone can make that decision later when DQF is populated.
     # for v in ['goes_imager_projection']:
         # aggregated[v] = glm[v]
-    aggregated['average_flash_area'].attrs.update(glm.average_flash_area.attrs)
-    aggregated['average_group_area'].attrs.update(glm.average_group_area.attrs)
+    if ('average_flash_area' in glm):
+        aggregated['average_flash_area'].attrs.update(glm.average_flash_area.attrs)
+    if ('average_group_area' in glm):
+        aggregated['average_group_area'].attrs.update(glm.average_group_area.attrs)
 
     time_unit = "{0:3.1f} min".format(minutes)
     for var in aggregated:
@@ -707,7 +720,7 @@ def aggregate(glm, minutes, start_end=None, rolling=False):
             [v.left for v in aggregated.time_bins.values]).isoformat()
         aggregated.attrs['time_coverage_end'] = max(
             [v.right for v in aggregated.time_bins.values]).isoformat()
-
+        
     return aggregated
 
 
