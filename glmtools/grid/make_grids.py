@@ -235,7 +235,7 @@ class GLMGridder(FlashGridder):
 
         flash_outgrids, flash_framer = self.flash_pipeline_setup()
         (init_density_grid, extent_density_grid, footprint_grid,
-            min_flash_area_grid, # flashsize_std_grid
+            #min_flash_area_grid, # flashsize_std_grid
             ) = flash_outgrids
 
         group_outgrids, group_framer = self.group_pipeline_setup()
@@ -259,7 +259,7 @@ class GLMGridder(FlashGridder):
             group_centroid_density_grid,
             group_footprint_grid,
             # groupsize_std_grid
-            min_flash_area_grid,
+            # min_flash_area_grid,
             )
         self.outgrids_3d = None
 
@@ -513,7 +513,7 @@ class GLMlutGridder(GLMGridder):
                      flash_counter=frame_count_log, do_events='time')
 
         outgrids = (init_density_grid, extent_density_grid,
-            footprint_grid, min_area_grid,
+            footprint_grid, #min_area_grid,
             )
         return outgrids, framer
 
