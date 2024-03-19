@@ -227,8 +227,15 @@ def interpolate_ccd_to_fixed_grid(data, x, y, X, Y, cache_key, cache_path='./', 
 
 def write_GLM_DQP(dqp, x_coord, y_coord, start, end, nadir_lon,
                   platform_ID='G16', orbital_slot='GOES-East', 
-                  instrument_ID='GLM-1', outpath='./{dataset_name}'):
-    """ Logic here is copied from glmtools.io.imagery.write_goes_imagery. """
+                  instrument_ID='GLM-1', outpath='./{dataset_name}',
+                  back=None):
+    """ Logic here is copied from glmtools.io.imagery.write_goes_imagery. 
+                  
+    if back is not None, background will be written as a separate variable using the
+        variable passed to back.
+    """
+
+    back_description = 'GLM Background Image, 1 nm band centered on 777.4 nm, quantized to 16 levels'
                   
     dqp_description = 'GLM Data Quality Product.'\
     ' Upper four bits are the GLM background and the lower four bits are as follows: '\
@@ -258,6 +265,12 @@ def write_GLM_DQP(dqp, x_coord, y_coord, start, end, nadir_lon,
     # Assign img_var.encoding['_Unsigned'] = 'true' for AWIPS reasons.
     dataset[img_var.name] = img_var
     
+    if back is not None:
+        back_img = np.flipud(back.T)
+        back_var = glm_image_to_var(back_img, 'background', back_description, '1', dims)#, dtype='u1')
+        back_var.encoding['_Unsigned'] = 'true'
+        dataset[back_var.name] = back_var
+    
     # Restore the cleared coord attrs
     dataset.x.attrs.update(xattrs)
     dataset.y.attrs.update(yattrs)
@@ -276,12 +289,14 @@ def write_GLM_DQP(dqp, x_coord, y_coord, start, end, nadir_lon,
 def dqf_from_nav_background(start, end, lat, lon, 
                             back, back_cal, thresh_fJ,
                             nadir_lon=-75.2,
-                            cache_key='dqf_nav_test_cache', cache_path='./', refresh_cache=False
-                            ):
+                            cache_key='dqf_nav_test_cache', cache_path='./', refresh_cache=False,
+                            combine_products=True):
     """ back is in DN, back_cal is calibrated radiance, 
         thresh_fJis the minimum detectable energy in each pixel.
+                            
+        combine_products=True packs both products into one 
     """
-    back_cal_quantized = scale_shift_back(back_cal)
+    
 
     # ***REPLACE*** with actual thresh_fJ as input
     # thresh_fJ = 8 - 8*back.astype(float)/float(dn_max)
@@ -308,14 +323,22 @@ def dqf_from_nav_background(start, end, lat, lon,
     x_bnd, y_bnd, x_ctr, y_ctr, X, Y = get_fixed_grid_coords()
     print(y_ctr[0], y_ctr[-1])
     
+    back_cal_quantized = scale_shift_back(back_cal, shift=combine_products)
     interp_back = interpolate_ccd_to_fixed_grid(back_cal_quantized, x, y, X, Y, 
                                                 cache_key, cache_path=cache_path, refresh_cache=refresh_cache)
+
     interp_dqp = interpolate_ccd_to_fixed_grid(fde_with_flags, x, y, X, Y,
                                                cache_key, cache_path=cache_path, refresh_cache=refresh_cache)
 
-    # Add the scaled background image into upper bits of the byte
-    dqf = np.bitwise_or(interp_back.astype('u1'), interp_dqp.astype('u1'))
-    
-    outname = write_GLM_DQP(dqf.astype('u1'), x_ctr, y_ctr, start, end, nadir_lon)
+    if combine_products == True:
+        # Add the scaled background image into upper bits of the byte
+        dqf = np.bitwise_or(interp_back.astype('u1'), interp_dqp.astype('u1')).astype('u1')
+        add_back = None
+    else: 
+        # Separate products each as conventional 1 byte variables.
+        dqf = interp_dqp.astype('u1')
+        add_back = interp_back.astype('u1')
+
+    outname = write_GLM_DQP(dqf, x_ctr, y_ctr, start, end, nadir_lon, back=add_back)
     
     return outname
