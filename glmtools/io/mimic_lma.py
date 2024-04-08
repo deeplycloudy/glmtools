@@ -248,13 +248,15 @@ def replicate_and_weight_split_child_dataset_new(parent_data, split_child_datase
         names=['lutevent_id', 'lutevent_energy', 'lutevent_time_offset',
                'lutevent_count', 'lutevent_flash_count', 'lutevent_group_count',
                'lutevent_total_flash_area', 'lutevent_total_group_area',
-               'lutevent_min_flash_area'],
+               'lutevent_min_flash_area', 'lutevent_min_event_energy',
+               'lutevent_total_event_flash_fraction'],
         weights={'lutevent_energy':'split_event_area_fraction',
                  'lutevent_count': 'split_event_mesh_area_fraction',
                  'lutevent_flash_count': 'split_event_mesh_area_fraction',
                  'lutevent_group_count': 'split_event_mesh_area_fraction',
                  'lutevent_total_flash_area':'split_event_mesh_area_fraction',
                  'lutevent_total_group_area':'split_event_mesh_area_fraction',
+                 'lutevent_total_event_flash_fraction':'split_event_area_fraction',
                  # 'lutevent_min_flash_area':'split_event_mesh_area_fraction',
                 }
         ):
@@ -818,6 +820,8 @@ def _fake_lma_events_from_split_glm_lutevents(split_events, basedate):
                  ('lutevent_total_flash_area', 'f4'),
                  ('lutevent_total_group_area', 'f4'),
                  ('lutevent_min_flash_area', 'f4'),
+                 ('lutevent_min_event_energy', 'f4'),
+                 ('lutevent_total_event_flash_fraction', 'f4'),
                  ]
 
     split_events['split_event_mesh_area_fraction'] = np.fabs(
@@ -849,6 +853,7 @@ def _fake_lma_events_from_split_glm_lutevents(split_events, basedate):
                            'split_lutevent_flash_count',
                            'split_lutevent_total_flash_area',
                            'split_lutevent_total_group_area',
+                           'split_lutevent_total_event_flash_fraction',
                            'xyidx'
                          ]].to_dataframe()
     min_data_in = split_events[['split_event_parent_event_id',
@@ -856,6 +861,7 @@ def _fake_lma_events_from_split_glm_lutevents(split_events, basedate):
                                 'split_event_mesh_x_idx',
                                 'split_event_mesh_y_idx',
                                 'split_lutevent_min_flash_area',
+                                'split_lutevent_min_event_energy',
                                 'xyidx'
                                 ]].to_dataframe()
 
@@ -883,7 +889,9 @@ def _fake_lma_events_from_split_glm_lutevents(split_events, basedate):
     event_np['lutevent_group_count'] = sum_data.split_lutevent_group_count
     event_np['lutevent_total_flash_area'] = sum_data.split_lutevent_total_flash_area
     event_np['lutevent_total_group_area'] = sum_data.split_lutevent_total_group_area
+    event_np['lutevent_total_event_flash_fraction'] = sum_data.split_lutevent_total_event_flash_fraction
     event_np['lutevent_min_flash_area'] = min_data.split_lutevent_min_flash_area
+    event_np['lutevent_min_event_energy'] = min_data.split_lutevent_min_event_energy
 
     return event_np
 

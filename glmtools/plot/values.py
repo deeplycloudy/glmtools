@@ -16,6 +16,14 @@ display_params['flash_extent_density'] = {
     'format_string':'{0:3.0f}'
 }
 
+display_params['event_flash_fraction'] = {
+    'product_label':"GOES-16 GLM Total Event Flash Fraction (count)",
+    'glm_norm':LogNorm(vmin=1e-6, vmax=10),
+    'file_tag':'event_flash_fraction',
+    'format_string':'{0:3.0f}'
+}
+
+
 display_params['group_centroid_density'] = {
     'product_label':"GOES-16 GLM Group Centroid Density (count)",
     'glm_norm':LogNorm(vmin=1, vmax=10),
@@ -35,6 +43,13 @@ display_params['total_energy'] = {
     'product_label':"GOES-16 GLM Total Energy (nJ)",
     'glm_norm':LogNorm(vmin=1e-8, vmax=1e-3),
     'file_tag':'total_energy',
+    'format_string':'{0:3.1e}'
+}
+
+display_params['minimum_event_energy'] = {
+    'product_label':"GOES-16 GLM Minimum Event Energy (nJ)",
+    'glm_norm':LogNorm(vmin=1e-10, vmax=1e-5),
+    'file_tag':'event_energy_min',
     'format_string':'{0:3.1e}'
 }
 

@@ -236,6 +236,7 @@ class GLMGridder(FlashGridder):
         flash_outgrids, flash_framer = self.flash_pipeline_setup()
         (init_density_grid, extent_density_grid, footprint_grid,
             min_flash_area_grid, # flashsize_std_grid
+            min_energy_grid, event_flash_fraction_grid,
             ) = flash_outgrids
 
         group_outgrids, group_framer = self.group_pipeline_setup()
@@ -260,6 +261,8 @@ class GLMGridder(FlashGridder):
             group_footprint_grid,
             # groupsize_std_grid
             min_flash_area_grid,
+            min_energy_grid,
+            event_flash_fraction_grid,
             )
         self.outgrids_3d = None
 
@@ -307,7 +310,9 @@ class GLMGridder(FlashGridder):
                                   'group_extent.nc',
                                   'group_centroid.nc',
                                   'group_area.nc',
-                                  'flash_area_min.nc')
+                                  'flash_area_min.nc',
+                                  'event_energy_min.nc',
+                                  'event_flash_fraction.nc')
         self.outfile_postfixes_3d = None
 
         self.field_names = ('flash_extent_density',
@@ -320,6 +325,8 @@ class GLMGridder(FlashGridder):
                        'group_centroid_density',
                        'average_group_area',
                        'minimum_flash_area',
+                       'minimum_event_energy',
+                       'event_flash_fraction',
                        )
 
         self.field_descriptions = ('Flash extent density',
@@ -332,6 +339,8 @@ class GLMGridder(FlashGridder):
                             'Group centroid density',
                             'Average group area',
                             'Minimum flash area',
+                            'Minimum event energy',
+                            'Accumulated fraction of events in each flash',
                             )
 
         # In some use cases, it's easier to calculate totals (for area or
@@ -356,6 +365,8 @@ class GLMGridder(FlashGridder):
             density_label,
             "km^2 per group",
             "km^2",
+            "nJ",
+            density_label,
             )
         self.field_units_3d = None
 
@@ -478,6 +489,8 @@ class GLMlutGridder(GLMGridder):
         extent_density_grid = np.zeros(grid_shape, dtype='float32')
         footprint_grid      = np.zeros(grid_shape, dtype='float32')
         min_area_grid       = np.zeros(grid_shape, dtype='float32')
+        min_energy_grid     = np.zeros(grid_shape, dtype='float32')
+        event_flash_fraction_grid = np.zeros(grid_shape, dtype='float32')
 
         all_frames = []
         for i in range(n_frames):
@@ -492,6 +505,12 @@ class GLMlutGridder(GLMGridder):
             accum_min_area = accumulate_minvar_on_grid_direct_idx(
                      min_area_grid[:,:,i],
                     'lutevent_min_flash_area', 'mesh_xi', 'mesh_yi')
+            accum_min_energy = accumulate_minvar_on_grid_direct_idx(
+                     min_energy_grid[:,:,i],
+                    'lutevent_min_event_energy', 'mesh_xi', 'mesh_yi')
+            accum_event_flash_fraction = accumulate_var_on_grid_direct_idx(
+                     event_flash_fraction_grid[:,:,i],
+                    'lutevent_total_event_flash_fraction', 'mesh_xi', 'mesh_yi')
 
             init_density_target   = point_density(accum_init_density)
 
@@ -501,6 +520,8 @@ class GLMlutGridder(GLMGridder):
                 select_dataset(accum_extent_density, use_event_data=True),
                 select_dataset(accum_footprint, use_event_data=True),
                 select_dataset(accum_min_area, use_event_data=True),
+                select_dataset(accum_min_energy, use_event_data=True),
+                select_dataset(accum_event_flash_fraction, use_event_data=True),
                 )
             spew_to_density_types = broadcast( broadcast_targets )
 
@@ -514,6 +535,7 @@ class GLMlutGridder(GLMGridder):
 
         outgrids = (init_density_grid, extent_density_grid,
             footprint_grid, min_area_grid,
+            min_energy_grid, event_flash_fraction_grid,
             )
         return outgrids, framer
 
@@ -555,8 +577,8 @@ class GLMlutGridder(GLMGridder):
             broadcast_targets = (
                 no_projection('ctr_x', 'ctr_y', 'ctr_z',
                     init_density_target, use_flashes=True),
-                select_dataset(accum_extent_density, use_event_data=True),                    
-                select_dataset(accum_footprint, use_event_data=True),                    
+                select_dataset(accum_extent_density, use_event_data=True),
+                select_dataset(accum_footprint, use_event_data=True),
                 )
             spew_to_density_types = broadcast( broadcast_targets )
 
@@ -595,8 +617,8 @@ class GLMlutGridder(GLMGridder):
 
         self.divide_grids[2]=0
         self.divide_grids[6]=4
-        
-    def write_grids(self, outpath = './{dataset_name}', output_writer = None, 
+
+    def write_grids(self, outpath = './{dataset_name}', output_writer = None,
                     output_writer_3d = None,
                     output_filename_prefix = None, output_kwargs={}):
 
@@ -741,7 +763,7 @@ class GridOutputPreprocess(object):
         x_coord, y_coord = args[3], args[4]
         grid = args[9]
         x_slice, y_slice = self.get_pad_slices()
-        
+
         args = (*args[:3], x_coord[x_slice], y_coord[y_slice], *args[5:9],
                 grid[x_slice, y_slice], *args[10:])
 
@@ -777,7 +799,7 @@ def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
     Passed to GLMGridder.write_grids:
         outpath, output_writer, output_writer_3d,
         output_kwargs, output_filename_prefix
-    For GLMlutGridder.write_grids, all of the above are passed, 
+    For GLMlutGridder.write_grids, all of the above are passed,
         but only output_kwargs and outpath are used.
         outpath can be a template string; defaults to {'./{dataset_name}'}
         Available named arguments in the template are:
@@ -785,7 +807,7 @@ def grid_GLM_flashes(GLM_filenames, start_time, end_time, **kwargs):
                 OR_GLM-L2-GLMM1-M3_G16_s20181830432000_e20181830433000_c20200461148520.nc
             start_time, end_time: datetimes that can be used with strftime syntax, e.g.
                 './{start_time:%y/%b/%d}/GLM_{start_time:%Y%m%d_%H%M%S}.nc'
-        
+
     Remaining keyword arguments are passed to the GLMGridder on initialization.
     """
 
@@ -897,14 +919,13 @@ def proc_each_grid(subgrid, start_time=None, end_time=None, GLM_filenames=None):
         # Pre-load the whole dataset, as recommended by the xarray docs.
         # This saves an absurd amount of time (factor of 80ish) in
         # grid.split_events.replicate_and_split_events
+        if not saved_first_file_metadata:
+            gridder.first_file_attrs = dict(glm.dataset.attrs)
+            saved_first_file_metadata = True
         if len(glm.dataset.number_of_events) > 0:
             # xarray 0.12.1 (and others?) throws an error when trying to load
             # data from an empty dimension.
             glm.dataset.load()
-
-            if not saved_first_file_metadata:
-                gridder.first_file_attrs = dict(glm.dataset.attrs)
-                saved_first_file_metadata = True
             gridder.process_flashes(glm, **process_flash_kwargs_ij)
         else:
             log.info("Skipping {0} - number of events is 0".format(filename))
@@ -920,13 +941,13 @@ def proc_each_grid(subgrid, start_time=None, end_time=None, GLM_filenames=None):
         out_kwargs_ij['output_kwargs']['pad'] = preprocess_out.get_pad_slices()
 
         output = gridder.write_grids(**out_kwargs_ij)
-        
+
         # Two things can happen here. If the lmatools CF NetCDF writer is used
         # (as it would be when using GLMGridder)
         # then write_all() is the step that actually does the writing after the
         # lmatools.FlashGridder.write_grids call is intercepted by the output
         # preprocessor. The GLMlutGridder, uses the pad slices kwarg
-        # and skips the preprocessor, and just writes directly. write_all() is 
+        # and skips the preprocessor, and just writes directly. write_all() is
         # does nothing in the GLMlutGridder case. It would be better
         # to resolve this inconsistency with a rearchitecture of how the
         # subgrids are handled - avoiding the hacky output preprocessor in

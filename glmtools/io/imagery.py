@@ -83,6 +83,18 @@ glm_scaling = {
         'scale_factor':1.0, 'add_offset':0.0},
     'total_energy':{'dtype':'uint16',
         'scale_factor':1.52597e-6, 'add_offset':0.0,},
+    # Revised (more precise) event_energy scale and offset from L2_LCFA files
+    # :scale_factor = 1.9024E-17f; // float
+    # :add_offset = 2.8515E-16f; // float
+    'minimum_event_energy':{'dtype':'uint16',
+        'scale_factor':1.9024E-11, 'add_offset':2.8515E-10,},
+    # WMO record flashes had about 55K events, so value could be as small
+    # as 1/55e3/49=3.7e-7 for 49 two km pixels per 14 km GLM source pixel.
+    # A 16 bit value would give a max of only 0.0066, so we use a 32 bit int,
+    # since the max value should probably be about 100 to accomodate high flash
+    # rate storms where the flashes are rarely more than a few pixels wide.
+    'event_flash_fraction':{'dtype':'uint32',
+        'scale_factor':1.0e-7, 'add_offset':0.0,},
 }
 
 def get_goes_imager_subpoint_vars(nadir_lon):
@@ -569,7 +581,7 @@ def write_goes_imagery(gridder, outpath='./{dataset_name}', pad=None, scale_and_
     return all_outfiles
 
 
-def aggregate(glm, minutes, start_end=None):
+def aggregate(glm, minutes, start_end=None, rolling=False):
     """ Given a multi-minute glm imagery dataset (such as that returned by
         glmtools.io.imagery.open_glm_time_series) and an integer number of minutes,
         recalculate average and minimum flash area for that interval and sum all other
@@ -580,10 +592,27 @@ def aggregate(glm, minutes, start_end=None):
             of interest, for example. If not provided, the start of the glm dataset plus
             *minutes* after the end of the glm dataset will be used.
 
+        rolling: if True (default False) the aggregation uses a rolling window with a
+            window duration of *minutes*. The aggregation will update at the same interval
+            as the original data. The rolling operation marks the time at the end of the
+            rolling window. For a five min aggregation the initial four minutes processed
+            will be missing data, so we want to drop those. For processing of long time
+            periods, it's necessary to add extra files at the beginning to keep things
+            consistent across a boundary.
+            # left slice index, time coordinate, implicit end of interval, right slice
+            0, 0000-0001, 1 (HHMM start - HHMMM end)
+            1, 0001-0002, 2
+            2, 0002-0003, 3
+            3, 0003-0004, 4
+            4, 0004-0005, 5: will have this plus previous four when aggregating by 5
+            So index the tiem coordinate by slice(4, None) to guarantee no missing minutes.
+            >>> drop_times = {'time':slice(agg_minutes-1, None)}
+            >>> ds_out = glm_agg[drop_times]
+
         This function expects the GLM data to have missing values (NaN) where
         there is no lightning and relies on the skipna functionality of
         DataArray.min() and .sum() to find the aggregation across frames where
-        each pixel has a mix of lightning and no-lightnign times. If these
+        each pixel has a mix of lightning and no-lightning times. If these
         frames instead had zero for minimum flash area the minimum value would
         be zero, leading to data loss and a clear difference between FED and
         MFA.
@@ -600,46 +629,67 @@ def aggregate(glm, minutes, start_end=None):
     if start_end is not None:
         start = start_end[0]
         end = start_end[1]
+        duration = end - start
     else:
-        start = pd.Timestamp(glm['time'].min().data).to_pydatetime()
-        end = pd.Timestamp(glm['time'].max().data).to_pydatetime() + dt
+        # start = pd.Timestamp(glm['time'].min().data).to_pydatetime()
+        # end = pd.Timestamp(glm['time'].max().data).to_pydatetime() + dt
         # The lines below might be necessary replacements for a future version
-        # start = pd.to_datetime(glm['time'].min().data).to_pydatetime()
-        # end = pd.to_datetime(glm['time'].max().data).to_pydatetime() + dt
+        start = pd.to_datetime(glm['time'].min().data).to_pydatetime()
+        end = pd.to_datetime(glm['time'].max().data).to_pydatetime() + dt
         # dt_np = (end - start).data
         # duration = pd.to_timedelta(dt_np).to_pytimedelta()
-    duration = end - start
-
+        duration = end - start
+    print("got start end")
     sum_vars = ['flash_extent_density', 'flash_centroid_density',
-                'total_energy',
+                'total_energy', 'event_flash_fraction',
                 'group_extent_density', 'group_centroid_density', ]
     sum_vars = [sv for sv in sum_vars if sv in glm]
     sum_data = glm[sum_vars]
-
+    print("got sum data")
     # goes_imager_projection is a dummy int variable, and all we care about
     # is the attributes.
     min_vars = ['minimum_flash_area', 'goes_imager_projection',
                     'nominal_satellite_subpoint_lat', 'nominal_satellite_subpoint_lon']
     min_vars = [mv for mv in min_vars if mv in glm]
     min_data = glm[min_vars]
+    print("got min data")
 
+    if ('average_flash_area' in glm) & ('flash_extent_density' in glm):
+        sum_data['total_flash_area'] = glm.average_flash_area*glm.flash_extent_density
+    if ('average_group_area' in glm) & ('group_extent_density' in glm):
+        sum_data['total_group_area'] = glm.average_group_area*glm.group_extent_density
+    print("got totals")
 
-
-    sum_data['total_flash_area'] = glm.average_flash_area*glm.flash_extent_density
-    sum_data['total_group_area'] = glm.average_flash_area*glm.flash_extent_density
-
-    t_bins = [start + dt*i for i in range(int(duration/dt)+1)]
-    t_groups_sum = sum_data.groupby_bins('time', bins=t_bins)
-    t_groups_min = min_data.groupby_bins('time', bins=t_bins)
-
-    aggregated_min = t_groups_min.min(dim='time', keep_attrs=True, skipna=True)
-
+    if rolling:
+        # Calculate the number of times over which to aggregate. Convert minutes
+        orig_interval = np.diff(glm['time']).mean()
+        n_agg = int(pd.to_timedelta(dt)/orig_interval)
+        # Manually construct window to work around this bug
+        #   https://github.com/pydata/xarray/issues/3165#issuecomment-516193739
+        t_groups_sum = sum_data.rolling({'time':n_agg}, min_periods=1).construct('window')
+        t_groups_min = min_data.rolling({'time':n_agg}, min_periods=1).construct('window')
+    else:
+        t_bins = [start + dt*i for i in range(int(duration/dt)+1)]
+        t_groups_sum = sum_data.groupby_bins('time', bins=t_bins)
+        t_groups_min = min_data.groupby_bins('time', bins=t_bins)
+    print("did rolling or groupby setup")
+    if rolling:
+        aggregated_min = t_groups_min.min(dim='window', keep_attrs=True, skipna=True)
+    else:
+        aggregated_min = t_groups_min.min(dim='time', keep_attrs=True, skipna=True)
+    print("did min")
     # Naively sum all variables … so average areas are now ill defined. Recalculate
-    aggregated = t_groups_sum.sum(dim='time', keep_attrs=True, skipna=True)
-    aggregated['average_flash_area'] = (aggregated.total_flash_area
-                                        / aggregated.flash_extent_density)
-    aggregated['average_group_area'] = (aggregated.total_group_area
-                                        / aggregated.group_extent_density)
+    if rolling:
+        aggregated = t_groups_sum.sum(dim='window', keep_attrs=True, skipna=True)
+    else:
+        aggregated = t_groups_sum.sum(dim='time', keep_attrs=True, skipna=True)
+    print("did sum")
+    if ('average_flash_area' in glm) & ('flash_extent_density' in glm):
+        aggregated['average_flash_area'] = (aggregated.total_flash_area
+                                            / aggregated.flash_extent_density)
+    if ('average_group_area' in glm) & ('group_extent_density' in glm):
+        aggregated['average_group_area'] = (aggregated.total_group_area
+                                            / aggregated.group_extent_density)
     for var in min_vars:
         aggregated[var] = aggregated_min[var]
 
@@ -649,13 +699,28 @@ def aggregate(glm, minutes, start_end=None):
     # Someone can make that decision later when DQF is populated.
     # for v in ['goes_imager_projection']:
         # aggregated[v] = glm[v]
+    if ('average_flash_area' in glm):
+        aggregated['average_flash_area'].attrs.update(glm.average_flash_area.attrs)
+    if ('average_group_area' in glm):
+        aggregated['average_group_area'].attrs.update(glm.average_group_area.attrs)
 
-    # time_bins is made up of Interval objects with left and right edges
-    aggregated.attrs['time_coverage_start'] = min(
-        [v.left for v in aggregated.time_bins.values]).isoformat()
-    aggregated.attrs['time_coverage_end'] = max(
-        [v.right for v in aggregated.time_bins.values]).isoformat()
+    time_unit = "{0:3.1f} min".format(minutes)
+    for var in aggregated:
+        if 'units' in aggregated[var].attrs:
+            var_unit = aggregated[var].attrs['units']
+            new_unit = var_unit.replace("1.0 min", time_unit)
+            aggregated[var].attrs['units'] = new_unit
 
+    if rolling:
+        # Time coordinate remains unchanged, so old metadata should be accurate
+        pass
+    else:
+        # time_bins is made up of Interval objects with left and right edges
+        aggregated.attrs['time_coverage_start'] = min(
+            [v.left for v in aggregated.time_bins.values]).isoformat()
+        aggregated.attrs['time_coverage_end'] = max(
+            [v.right for v in aggregated.time_bins.values]).isoformat()
+        
     return aggregated
 
 
