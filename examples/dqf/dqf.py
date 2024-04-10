@@ -290,7 +290,7 @@ def dqf_from_nav_background(start, end, lat, lon,
                             back, back_cal, thresh_fJ,
                             nadir_lon=-75.2,
                             cache_key='dqf_nav_test_cache', cache_path='./', refresh_cache=False,
-                            combine_products=True):
+                            combine_products=True, outpath='./{dataset_name}'):
     """ back is in DN, back_cal is calibrated radiance, 
         thresh_fJis the minimum detectable energy in each pixel.
                             
@@ -305,9 +305,9 @@ def dqf_from_nav_background(start, end, lat, lon,
     # print(fde.min(), fde.max())
 
     # ***REPLACE*** with actual boolean mask for is_saturated and near_saturated
-    dn_max = 13000
-    is_saturated_thresh = dn_max - 8
-    near_saturated_thresh = 0.9*dn_max
+    dn_max = 2**14 # 16384
+    is_saturated_thresh = dn_max - 2**5 # 2**5=32 
+    near_saturated_thresh = dn_max - 2**10
     is_saturated = (back >= is_saturated_thresh)
     near_saturated = ~is_saturated & (back >= near_saturated_thresh)
     
@@ -323,7 +323,7 @@ def dqf_from_nav_background(start, end, lat, lon,
     x_bnd, y_bnd, x_ctr, y_ctr, X, Y = get_fixed_grid_coords()
     print(y_ctr[0], y_ctr[-1])
     
-    back_cal_quantized = scale_shift_back(back_cal, shift=combine_products)
+    back_cal_quantized = scale_shift_back(back_cal, shift=combine_products, back_max=dn_max)
     interp_back = interpolate_ccd_to_fixed_grid(back_cal_quantized, x, y, X, Y, 
                                                 cache_key, cache_path=cache_path, refresh_cache=refresh_cache)
 
@@ -339,6 +339,6 @@ def dqf_from_nav_background(start, end, lat, lon,
         dqf = interp_dqp.astype('u1')
         add_back = interp_back.astype('u1')
 
-    outname = write_GLM_DQP(dqf, x_ctr, y_ctr, start, end, nadir_lon, back=add_back)
+    outname = write_GLM_DQP(dqf, x_ctr, y_ctr, start, end, nadir_lon, back=add_back, outpath=outpath)
     
     return outname
