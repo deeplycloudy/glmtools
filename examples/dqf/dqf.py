@@ -169,9 +169,9 @@ def get_fixed_grid_coords():
     # ctr_lon, ctr_lat, ctr_alt = grs80lla.fromECEF(
     #     *geofixcs.toECEF(x_ctr, y_ctr, 0.0))
 
-    print(x_bnd.shape, y_bnd.shape)
-    print(x_ctr.shape, y_ctr.shape)
-    print(X.shape, Y.shape)
+    # print(x_bnd.shape, y_bnd.shape)
+    # print(x_ctr.shape, y_ctr.shape)
+    # print(X.shape, Y.shape)
     
     return x_bnd, y_bnd, x_ctr, y_ctr, X, Y
     
@@ -221,7 +221,7 @@ def interpolate_ccd_to_fixed_grid(data, x, y, X, Y, cache_key, cache_path='./', 
     
     # Now use the index cache to look up the original data values
     # out_field = np.empty(interp_loc.shape[0])
-    interp_field_from_cached = interp_data[indexed_interp_field]
+    interp_field_from_cached = interp_data[indexed_interp_field.astype('int64')]
     interp_field_from_cached.shape = X[subset, subset].shape
     return interp_field_from_cached
 
@@ -321,7 +321,7 @@ def dqf_from_nav_background(start, end, lat, lon,
     # Coords of target image. X, Y are 2D meshgrids of y_ctr, x_ctr.
     # bnd variables are the edges instead of the center of the pixels.
     x_bnd, y_bnd, x_ctr, y_ctr, X, Y = get_fixed_grid_coords()
-    print(y_ctr[0], y_ctr[-1])
+    # print(y_ctr[0], y_ctr[-1])
     
     back_cal_quantized = scale_shift_back(back_cal, shift=combine_products, back_max=dn_max)
     interp_back = interpolate_ccd_to_fixed_grid(back_cal_quantized, x, y, X, Y, 

@@ -42,7 +42,7 @@ def process_one_ds(ds_in, combine=False, outpath='./{dataset_name}'):
     # # All this will get replaced with output from Bitzer's code. 
     # # Note shapes of arrays should match below.
     import joblib
-    lat_joblib, lon_joblib, back_in = joblib.load('/Users/ebruning/Downloads/nav_bkgnd.joblib')
+    lat_joblib, lon_joblib, back_in = joblib.load('/home/lma_admin/glmback/nav_bkgnd.joblib')
     # Handle subsetting
     # back = back_in[:1299, :1370]
     lat_joblib.shape = (1299, 1370)
@@ -74,14 +74,15 @@ def process_one_ds(ds_in, combine=False, outpath='./{dataset_name}'):
     # instead of raw_dn (back, back as arguments below).
     outfile = dqf_from_nav_background(start, end, lat, lon, back, back, thresh_fJ, 
         cache_key=cache_key, combine_products=combine, outpath=outpath)
+    return outfile
     
     
 def main(infile, outpath, combine=False):
     with open(infile, 'r') as allfiles:
         for thisfile in allfiles:
             ds_in = xr.open_dataset(thisfile.strip()).load()
-            process_one_ds(ds_in, combine=combine, outpath=outpath)
-            
+            outfile = process_one_ds(ds_in, combine=combine, outpath=outpath)
+            print(outfile)
 
 if __name__ == '__main__':
     import sys
