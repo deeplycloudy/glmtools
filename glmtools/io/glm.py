@@ -277,11 +277,13 @@ class GLMDataset(OneToManyTraversal):
                 group_time_of_flight = (group_range/299792458) * np.timedelta64(1000000000, 'ns')
                 self.dataset.group_time_offset.data += group_time_of_flight
 
-                flash_X, flash_Y, flash_Z = geo_sys.toECEF(self.dataset.flash_lon.data, self.dataset.flash_lat.data, np.zeros_like(self.dataset.flash_lat.data))
-                flash_range = ((flash_X-satellite_X)**2 + (flash_Y-satellite_Y)**2 + (flash_Z-satellite_Z)**2)**0.5
-                flash_time_of_flight = (flash_range/299792458) * np.timedelta64(1000000000, 'ns')
-                self.dataset.flash_time_offset_of_first_event.data += flash_time_of_flight
-                self.dataset.flash_time_offset_of_last_event.data += flash_time_of_flight
+                grouped_flashes = self.dataset.groupby('event_parent_flash_id')
+                for flash_id, events in grouped_flashes:
+                    first_event_time = events.event_time_offset.data.min()
+                    last_event_time = events.event_time_offset.data.max()
+                    self.dataset.flash_time_offset_of_first_event[self.dataset.flash_id == flash_id] = first_event_time
+                    self.dataset.flash_time_offset_of_last_event[self.dataset.flash_id == flash_id] = last_event_time
+
 
 
     def __init_parent_child_data(self):
