@@ -41,27 +41,27 @@ from dqf import dqf_from_nav_background
 def process_one_ds(ds_in, combine=False, outpath='./{dataset_name}'):
     # # All this will get replaced with output from Bitzer's code. 
     # # Note shapes of arrays should match below.
-    import joblib
-    lat_joblib, lon_joblib, back_in = joblib.load('/home/lma_admin/glmback/nav_bkgnd.joblib')
+    # import joblib
+    # lat_joblib, lon_joblib, back_in = joblib.load('/home/lma_admin/glmback/nav_bkgnd.joblib')
     # Handle subsetting
     # back = back_in[:1299, :1370]
-    lat_joblib.shape = (1299, 1370)
-    lon_joblib.shape = (1299, 1370)
+    # lat_joblib.shape = (1299, 1370)
+    # lon_joblib.shape = (1299, 1370)
     
     
     # For now pretend the background image above is from the joblib file, since those are the only good positions we have
     # back_in.shape == (1300, 1372) from joblib, transposed from what we have here.
     # So need to transpose lat and lon, and also subset back_in to match those shapes
-    lat = lat_joblib.T
-    lon = lon_joblib.T
-    back = ds_in.bg_dn.values[:1370, :1299]
-    thresh_fJ = 1.0e15*ds_in.bg_img.values[:1370, :1299]
+    # lat = lat_joblib.T
+    # lon = lon_joblib.T
+    # back = ds_in.bg_dn.values[:1370, :1299]
+    # thresh_fJ = 1.0e15*ds_in.bg_img.values[:1370, :1299]
     # === end replacement ===
     # === Expected final code below ===
-    # back = ds_in.bg_dn.values 
-    # lat = ds_in.lats.values
-    # lon = ds_in.lons.values
-    # thresh_fJ = 1.0e15*ds_in.bg_img.values
+    back = ds_in.bg_dn.values
+    lat = ds_in.lats.values
+    lon = ds_in.lons.values
+    thresh_fJ = 1.0e15*ds_in.bg_img.values
     # === end expected final code ===
     
     start = datetime.strptime(ds_in.attrs['Date Valid'], '%Y-%m-%dT%H%M%S')
