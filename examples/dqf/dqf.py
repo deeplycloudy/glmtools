@@ -192,7 +192,13 @@ def interpolate_ccd_to_fixed_grid(data, x, y, X, Y, cache_key, cache_path='./', 
     # (N, D)
     interp_loc = np.vstack((X[subset, subset].flatten(), Y[subset, subset].flatten())).T
     data_loc = np.vstack((x[subset,subset].flatten(), y[subset,subset].flatten())).T
-    interp_data = data[subset,subset].flatten()
+    
+    # Check for finite (not-nan) values of data locations
+    data_keep = ((np.isfinite(data_loc[:,0])) & (np.isfinite(data_loc[:,1])))
+    data_loc = data_loc[data_keep, :] # second dimension has N=2, i.e., [n_points, 2]
+
+    interp_data = data[subset,subset].flatten()[data_keep]
+
     
     # Thought about caching the cKDTree used in
     # https://github.com/scipy/scipy/blob/v1.12.0/scipy/interpolate/_ndgriddata.py#L20-L166
