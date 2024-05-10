@@ -253,6 +253,9 @@ def write_GLM_DQP(dqp, x_coord, y_coord, start, end, nadir_lon,
         platform_ID, orbital_slot, instrument_ID, scene_id,
         nominal_resolution, "ABI Mode 3", "DE", "Postprocessed", "TTU"
         )
+        
+    global_attrs['time_coverage_end'] = str(global_attrs['time_coverage_end']).replace('Z', '.0Z')
+    global_attrs['time_coverage_start'] = str(global_attrs['time_coverage_start']).replace('Z', '.0Z')
     dataset = dataset.assign_attrs(**global_attrs)
 
     # Adding a new variable to the dataset below clears the coord attrs
