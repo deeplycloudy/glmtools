@@ -218,7 +218,7 @@ def interpolate_ccd_to_fixed_grid(data, x, y, X, Y, cache_key, cache_path='./', 
     else:
         # Create and cache the interpolation lookup from scratch.
         # Set up tree in a way that is a faster in query (2x in my experimentation), per
-        # https://stackoverflow.com/questions/31819778/scipy-spatial-ckdtree-running-slowly/31840982#31840982    
+        # https://stackoverflow.com/questions/31819778/scipy-spatial-ckdtree-running-slowly/31840982#31840982
         tree_options = dict(balanced_tree=False, compact_nodes=False)
         interp_data_index = np.arange(interp_data.shape[0])
         index_interpolator = spint.NearestNDInterpolator(data_loc, interp_data_index, tree_options=tree_options)
@@ -227,8 +227,15 @@ def interpolate_ccd_to_fixed_grid(data, x, y, X, Y, cache_key, cache_path='./', 
     
     # Now use the index cache to look up the original data values
     # out_field = np.empty(interp_loc.shape[0])
-    interp_field_from_cached = interp_data[indexed_interp_field.astype('int64')]
-    interp_field_from_cached.shape = X[subset, subset].shape
+    try:
+        interp_field_from_cached = interp_data[indexed_interp_field.astype('int64')]
+        interp_field_from_cached.shape = X[subset, subset].shape
+    except IndexError:
+        print("Use of cached navigation failed, resetting cache")
+        if os.path.exists(cache_file):
+            os.remove(cache_file)        
+
+
     return interp_field_from_cached
 
 def write_GLM_DQP(dqp, x_coord, y_coord, start, end, nadir_lon,
