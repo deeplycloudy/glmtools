@@ -274,16 +274,21 @@ def write_GLM_DQP(dqp, x_coord, y_coord, start, end, nadir_lon,
     # Transpose here because glmtools expects x in the zeroth axis for reasons I regret.
     image = np.flipud(dqp.T)
 
+    product_fill = np.asarray(0, dtype='u1')
+
     dims = ('y', 'x')
     # 1 is unitless
-    img_var = glm_image_to_var(image, 'DQF', dqp_description, '1', dims)#, dtype='u1')
+    print(image.dtype)
+    img_var = glm_image_to_var(image, 'DQF', 
+        dqp_description, '1', dims, fill=product_fill, dtype='i1')
     img_var.encoding['_Unsigned'] = 'true'
     # Assign img_var.encoding['_Unsigned'] = 'true' for AWIPS reasons.
     dataset[img_var.name] = img_var
     
     if back is not None:
         back_img = np.flipud(back.T)
-        back_var = glm_image_to_var(back_img, 'background', back_description, '1', dims)#, dtype='u1')
+        back_var = glm_image_to_var(back_img, 'background', 
+            back_description, '1', dims, fill=product_fill, dtype='i1')
         back_var.encoding['_Unsigned'] = 'true'
         dataset[back_var.name] = back_var
     
