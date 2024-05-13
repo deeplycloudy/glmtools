@@ -278,7 +278,6 @@ def write_GLM_DQP(dqp, x_coord, y_coord, start, end, nadir_lon,
 
     dims = ('y', 'x')
     # 1 is unitless
-    print(image.dtype)
     img_var = glm_image_to_var(image, 'DQF', 
         dqp_description, '1', dims, fill=product_fill, dtype='i1')
     img_var.encoding['_Unsigned'] = 'true'
