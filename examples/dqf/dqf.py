@@ -131,12 +131,14 @@ def thresh_to_de(thresh):
     
     thresh_out_of_range = (thresh > 14.5)
     
+    lis_overall_de = 0.8
+    
     de = (  coeffs[0] * thresh*thresh*thresh*thresh*thresh
           + coeffs[1] * thresh*thresh*thresh*thresh
           + coeffs[2] * thresh*thresh*thresh
           + coeffs[3] * thresh*thresh
           + coeffs[4] * thresh 
-          + coeffs[5])
+          + coeffs[5]) * lis_overall_de
     # if isinstance(thresh, xr.DataArray):
         # de.where(thresh_out_of_range, other=7.0)
     # else:
