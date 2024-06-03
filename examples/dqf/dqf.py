@@ -346,6 +346,12 @@ def dqf_from_nav_background(start, end, lat, lon,
     # print(y_ctr[0], y_ctr[-1])
     
     back_cal_quantized = scale_shift_back(back_cal, shift=combine_products, back_max=dn_max)
+    
+    # Manually reset the cache every time this function is run until we can fix the caching strategy.
+    cache_file = os.path.join(cache_path, cache_key+'.npy')
+    if os.path.exists(cache_file):
+        os.remove(cache_file)
+    
     interp_back = interpolate_ccd_to_fixed_grid(back_cal_quantized, x, y, X, Y, 
                                                 cache_key, cache_path=cache_path, refresh_cache=refresh_cache)
 
