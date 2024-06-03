@@ -333,6 +333,12 @@ def dqf_from_nav_background(start, end, lat, lon,
     is_saturated = (back >= is_saturated_thresh)
     near_saturated = ~is_saturated & (back >= near_saturated_thresh)
     
+    # Convert to radiance in W/m2/sr/um
+    back_rad_scale_factor = 10000/(2**14-1)
+    back_rad = back_cal * back_rad_scale_factor
+    # Determined emprically by looking at data on 3 June, at solar noon at the subsatellite point.
+    back_min, back_max = 0, 512
+    
     fde_with_flags = scale_fde(fde)
     fde_with_flags[is_saturated] = at_saturation_val
     fde_with_flags[near_saturated] = near_saturation_val
@@ -345,7 +351,7 @@ def dqf_from_nav_background(start, end, lat, lon,
     x_bnd, y_bnd, x_ctr, y_ctr, X, Y = get_fixed_grid_coords()
     # print(y_ctr[0], y_ctr[-1])
     
-    back_cal_quantized = scale_shift_back(back_cal, shift=combine_products, back_max=dn_max)
+    back_cal_quantized = scale_shift_back(back_rad, shift=combine_products, back_min=back_min, back_max=back_max)
     
     # Manually reset the cache every time this function is run until we can fix the caching strategy.
     cache_file = os.path.join(cache_path, cache_key+'.npy')

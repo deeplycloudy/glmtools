@@ -59,6 +59,7 @@ def process_one_ds(ds_in, combine=False, outpath='./{dataset_name}'):
     # === end replacement ===
     # === Expected final code below ===
     back = ds_in.bg_dn.values
+    back_cal = ds_in.bg_cal.values 
     lat = ds_in.lats.values
     lon = ds_in.lons.values
     thresh_fJ = 1.0e15*ds_in.bg_img.values
@@ -72,7 +73,7 @@ def process_one_ds(ds_in, combine=False, outpath='./{dataset_name}'):
     # which is as easy as changing the kwargs passed to scale_shift_back.
     # This must be changed if we start using an actually calibrated background,
     # instead of raw_dn (back, back as arguments below).
-    outfile = dqf_from_nav_background(start, end, lat, lon, back, back, thresh_fJ, 
+    outfile = dqf_from_nav_background(start, end, lat, lon, back, back_cal, thresh_fJ, 
         cache_key=cache_key, combine_products=combine, outpath=outpath)
     return outfile
     
