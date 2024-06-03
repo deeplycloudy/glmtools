@@ -9,6 +9,8 @@ from glmtools.io.traversal import OneToManyTraversal
 from glmtools.io.lightning_ellipse import ltg_ellps_lon_lat_to_fixed_grid
 from glmtools.io.lightning_ellipse import ltg_ellpse_rev
 
+from lmatools.coordinateSystems import GeographicSystem
+
 import logging
 log = logging.getLogger(__name__)
 log.addHandler(logging.NullHandler())
@@ -152,7 +154,7 @@ def event_areas(flash_data):
 class GLMDataset(OneToManyTraversal):
     def __init__(self, filename, calculate_parent_child=True, ellipse_rev=-1,
                  check_area_units=True, change_energy_units=True,
-                 fix_bad_DO07_times=True, check_tree=True):
+                 fix_bad_DO07_times=True, check_tree=True, fix_bad_time_of_flight=True):
         """ filename is any data source which works with xarray.open_dataset
 
             By default, helpful additional parent-child data are calculated,
@@ -184,6 +186,9 @@ class GLMDataset(OneToManyTraversal):
             fix_bad_DO07_times: If True (default), correct for the missing
                 _Unsigned attribute for the ~month in Oct-Nov 2018 when the
                 problem was present.
+            fix_bad_time_of_flight: If True (default), correct for the the time
+                flight from the source to the satellite which was not included
+                before the first ellipsoid revision.
         """
         self.entity_ids = ['flash_id', 'group_id', 'event_id']
         self.parent_ids = ['group_parent_flash_id', 'event_parent_group_id']
@@ -250,6 +255,36 @@ class GLMDataset(OneToManyTraversal):
             # changing units.
             did_fix = self._eliminate_zero_energy()
             did_fix = self._change_energy_units()
+        if fix_bad_time_of_flight:
+            pt = self.dataset.product_time.dt
+            date = datetime(int(pt.year), int(pt.month), int(pt.day),
+                            int(pt.hour), int(pt.minute), int(pt.second))
+            check_ellipse_rev = ltg_ellpse_rev(date)
+            if check_ellipse_rev == 0:
+                geo_sys = GeographicSystem()
+                satellite_lla = (self.dataset.nominal_satellite_subpoint_lon.data.item(),
+                                 self.dataset.nominal_satellite_subpoint_lat.data.item(),
+                                 self.dataset.nominal_satellite_height.data.item()*1000)
+                satellite_X, satellite_Y, satellite_Z = geo_sys.toECEF(*satellite_lla)
+                event_X, event_Y, event_Z = geo_sys.toECEF(self.dataset.event_lon.data, self.dataset.event_lat.data, np.zeros_like(self.dataset.event_lat.data))
+                event_range = ((event_X-satellite_X)**2 + (event_Y-satellite_Y)**2 + (event_Z-satellite_Z)**2)**0.5
+                event_time_of_flight = (event_range/299792458) * np.timedelta64(1000000000, 'ns')
+                self.dataset.event_time_offset.data += event_time_of_flight
+
+
+                group_X, group_Y, group_Z = geo_sys.toECEF(self.dataset.group_lon.data, self.dataset.group_lat.data, np.zeros_like(self.dataset.group_lat.data))
+                group_range = ((group_X-satellite_X)**2 + (group_Y-satellite_Y)**2 + (group_Z-satellite_Z)**2)**0.5
+                group_time_of_flight = (group_range/299792458) * np.timedelta64(1000000000, 'ns')
+                self.dataset.group_time_offset.data += group_time_of_flight
+
+                grouped_flashes = self.dataset.groupby('event_parent_flash_id')
+                for flash_id, events in grouped_flashes:
+                    first_event_time = events.event_time_offset.data.min()
+                    last_event_time = events.event_time_offset.data.max()
+                    self.dataset.flash_time_offset_of_first_event[self.dataset.flash_id == flash_id] = first_event_time
+                    self.dataset.flash_time_offset_of_last_event[self.dataset.flash_id == flash_id] = last_event_time
+
+
 
     def __init_parent_child_data(self):
         """ Calculate implied parameters that are useful for analyses
