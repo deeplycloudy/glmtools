@@ -44,6 +44,7 @@ import logging
 log = logging.getLogger(__name__)
 log.addHandler(logging.NullHandler())
 
+from os import path
 import pickle
 import numpy as np
 from scipy.interpolate import LinearNDInterpolator, NearestNDInterpolator
@@ -229,12 +230,14 @@ def save_pixel_corner_lookup(lons, lats, corners, filename=None):
     else:
         return pickle.dumps(obj)
 
-def load_pixel_corner_lookup(filename):
+def load_pixel_corner_lookup(filename=None):
     """
     Returns (lons, lats, corners), the pickeled objects created by
     save_pixel_corner_lookup.
     Equivalent to the arguments returned by read_official_corner_lut.
     """
+    if filename == None:
+        filename = path.join(path.dirname(__file__), 'G16_corner_lut_fixedgrid.pickle')
     with open(filename, 'rb') as f:
         obj = pickle.load(f)
     return obj
