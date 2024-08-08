@@ -62,7 +62,7 @@ def ltg_ellps_radii(date):
     Returns: re_ltg_ellps, rp_ltg_ellps (meters): equatorial and polar radii
         of the lightning ellipsoid, respectively.
     """
-    re_ltg_ellps, rp_ltg_ellps = lightning_ellipse_rev[ltg_ellps_rev(date)]
+    re_ltg_ellps, rp_ltg_ellps = lightning_ellipse_rev[ltg_ellpse_rev(date)]
     return re_ltg_ellps, rp_ltg_ellps
 
 def ltg_ellps_lon_lat_to_fixed_grid(lon, lat, sat_lon, ellipse_rev,
