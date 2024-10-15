@@ -550,12 +550,10 @@ class GLMDataset(OneToManyTraversal):
         nadir_lon = self.dataset.lon_field_of_view.data
         ellipse_rev = self.ellipse_rev
         if ellipse_rev < 0:
-            log.info("Inferring lightning ellipsoid from GLM product time")
-            pt = self.dataset.product_time.dt
-            date = datetime(pt.year, pt.month, pt.day,
-                            pt.hour, pt.minute, pt.second)
+            log.debug("Inferring lightning ellipsoid from GLM product time")
+            date = pd.to_datetime(self.dataset.product_time.data)
             ellipse_rev = ltg_ellpse_rev(date)
-        log.info("Using lightning ellipsoid rev {0}".format(ellipse_rev))
+        log.debug("Using lightning ellipsoid rev {0}".format(ellipse_rev))
 
         event_x, event_y = ltg_ellps_lon_lat_to_fixed_grid(
             self.dataset.event_lon.data, self.dataset.event_lat.data,
