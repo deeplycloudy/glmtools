@@ -552,8 +552,8 @@ class GLMDataset(OneToManyTraversal):
         if ellipse_rev < 0:
             log.info("Inferring lightning ellipsoid from GLM product time")
             pt = self.dataset.product_time.dt
-            date = datetime(pt.year, pt.month, pt.day,
-                            pt.hour, pt.minute, pt.second)
+            date = datetime(int(pt.year), int(pt.month), int(pt.day),
+                            int(pt.hour), int(pt.minute), int(pt.second))
             ellipse_rev = ltg_ellpse_rev(date)
         log.info("Using lightning ellipsoid rev {0}".format(ellipse_rev))
 
