@@ -602,11 +602,11 @@ flash_dtype=[('area', '<f4'),  ('total_energy', '<f4'),
              ('start', '<f8'), ('duration', '<f4'),
              ('init_lat', '<f4'), ('init_lon', '<f4'),
              ('init_alt', '<f4'),# ('init_pts', 'S256'),
-             ('flash_id', '<i4'),  ('n_points', '<i2'),  ]
+             ('flash_id', '<i4'),  ('n_points', '<i4'),  ]
 flash_dtype_fixedgridlut=[('area', '<f4'),  ('total_energy', '<f4'),
              ('start', '<f8'), ('duration', '<f4'),
              ('ctr_x', '<f4'), ('ctr_y', '<f4'), ('ctr_z', '<f4'),
-             ('flash_id', '<i4'),  ('n_points', '<i2'),  ]
+             ('flash_id', '<i4'),  ('n_points', '<i4'),  ]
 
 def _fake_lma_from_glm_flashes(flash_data, basedate,
         split_events=None, split_groups=None, split_flashes=None):
