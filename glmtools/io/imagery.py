@@ -108,7 +108,7 @@ def get_goes_imager_subpoint_vars(nadir_lon):
     sublat = xr.DataArray(0.0, name='nominal_satellite_subpoint_lat',
                           attrs=sublat_meta)
     sublat.encoding = sublat_enc
-    sublon = xr.DataArray(nadir_lon, name='nominal_satellite_subpoint_lon',
+    sublon = xr.DataArray(nadir_lon[0], name='nominal_satellite_subpoint_lon',
                           attrs=sublon_meta)
     sublon.encoding = sublon_enc
     return sublon, sublat
