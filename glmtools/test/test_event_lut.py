@@ -1,5 +1,5 @@
 import numpy as np
-from numpy.testing import assert_equal
+from numpy.testing import assert_equal, assert_allclose
 
 from glmtools.io.glm import get_lutevents
 
@@ -32,6 +32,11 @@ def check_flash_dataset(fls):
     # Direcly sum all event energy and get event count
     fls = get_lutevents(fls)
     print(fls)
+
+    # Handle empty datasets - no events to check
+    if fls.sizes.get('number_of_events', 0) == 0:
+        return fls
+
     total_energy = fls.event_energy.data.sum()
     total_count = fls.event_id.shape[0]
 
@@ -50,7 +55,8 @@ def check_flash_dataset(fls):
         total_energy_lut += lut_row.lutevent_energy.data
         total_count_lut += lut_row.lutevent_count.data
     
-    assert_equal(total_energy, total_energy_lut)
+    # Use assert_allclose for floating point comparison due to precision limits
+    assert_allclose(total_energy, total_energy_lut, rtol=1e-5)
     assert_equal(total_count, total_count_lut)
     
     return fls

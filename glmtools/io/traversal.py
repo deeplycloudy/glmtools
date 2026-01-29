@@ -72,7 +72,7 @@ class OneToManyTraversal(object):
         self.child_to_parent = collections.OrderedDict()
         self.parent_to_child = collections.OrderedDict()
         for (entity_var, parent_var) in self._descend():
-            if dataset.dims[dataset[entity_var].dims[0]] == 0:
+            if dataset.sizes[dataset[entity_var].dims[0]] == 0:
                 # No data, so groupby will fail in xarray > 0.13
                 entity_grouper = None
             else:
@@ -81,7 +81,7 @@ class OneToManyTraversal(object):
             if parent_var is None:
                 parent_grouper = None
             else:
-                if dataset.dims[dataset[parent_var].dims[0]] == 0:
+                if dataset.sizes[dataset[parent_var].dims[0]] == 0:
                     # No data, so groupby will fail in xarray > 0.13
                     parent_grouper = None
                 else:

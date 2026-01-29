@@ -255,9 +255,9 @@ class GLMDataset(OneToManyTraversal):
         """ Calculate implied parameters that are useful for analyses
             of GLM data.
         """
-        if ((self.dataset.dims['number_of_flashes'] == 0) |
-            (self.dataset.dims['number_of_groups'] == 0) |
-            (self.dataset.dims['number_of_events'] == 0)):
+        if ((self.dataset.sizes['number_of_flashes'] == 0) |
+            (self.dataset.sizes['number_of_groups'] == 0) |
+            (self.dataset.sizes['number_of_events'] == 0)):
             no_data = True
             log.warning('File {0} has no data, skipping it'.format(
                         self._filename))
@@ -552,8 +552,8 @@ class GLMDataset(OneToManyTraversal):
         if ellipse_rev < 0:
             log.info("Inferring lightning ellipsoid from GLM product time")
             pt = self.dataset.product_time.dt
-            date = datetime(pt.year, pt.month, pt.day,
-                            pt.hour, pt.minute, pt.second)
+            date = datetime(pt.year.item(), pt.month.item(), pt.day.item(),
+                            pt.hour.item(), pt.minute.item(), pt.second.item())
             ellipse_rev = ltg_ellpse_rev(date)
         log.info("Using lightning ellipsoid rev {0}".format(ellipse_rev))
 
@@ -622,6 +622,16 @@ def get_lutevents(dataset, scale_factor=28e-6, event_dim='number_of_events',
     # xarray copys are shallow/cheap, and the xarray docs promote returning new
     # datasets http://xarray.pydata.org/en/stable/combining.html
     dataset = dataset.copy()
+
+    # Handle empty datasets - groupby fails on empty DataArrays in xarray > 0.13
+    if dataset.sizes.get(event_dim, 0) == 0:
+        log.debug("Empty dataset, skipping lut event calculation")
+        # Add empty lutevent dimension to maintain consistent interface
+        dataset['lutevent_id'] = xr.DataArray(np.array([], dtype='u8'),
+                                               dims=['lutevent_id'])
+        dataset = dataset.set_coords('lutevent_id')
+        return dataset
+
     event_x, event_y = dataset.event_x.data, dataset.event_y.data
     event_energy = dataset.event_energy.data
     product_time = dataset.product_time.data

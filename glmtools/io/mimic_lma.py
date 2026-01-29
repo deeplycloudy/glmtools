@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import numpy as np
 import xarray as xr
 
@@ -392,8 +394,8 @@ def read_flash_chunk(flash_data, glm=None, target=None, base_date=None, nadir_lo
 
         if fixed_grid:
             pt = flash_data.product_time.dt
-            date = datetime(pt.year, pt.month, pt.day,
-                            pt.hour, pt.minute, pt.second)
+            date = datetime(pt.year.item(), pt.month.item(), pt.day.item(),
+                            pt.hour.item(), pt.minute.item(), pt.second.item())
 
             x_lut, y_lut, corner_lut = load_pixel_corner_lookup(corner_pickle)
             # Convert from microradians to radians

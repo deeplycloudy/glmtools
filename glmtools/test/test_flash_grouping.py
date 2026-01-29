@@ -28,7 +28,7 @@ def test_flash_ids_for_events():
     
     flash_ids_for_events = glm.dataset['event_parent_flash_id'].data
     
-    n_events = glm.dataset.dims['number_of_events']
+    n_events = glm.dataset.sizes['number_of_events']
     assert_equal(flash_ids_for_events.shape[0], n_events)
     
     unq_fl_ids = np.unique(flash_ids_for_events)

@@ -90,3 +90,4 @@ ENV/
 
 # Mac filesystem detritus
 .DS_store
+test_data/
